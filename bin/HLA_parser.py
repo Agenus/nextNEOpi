@@ -48,12 +48,9 @@ def filter_class_I(hlas=[]):
             class_II.append(hla)
     return class_II
 
+
 def filter_class_II(hlas=[]):
-    ref_I = [
-        "HLA-A",
-        "HLA-B",
-        "HLA-C"
-    ]
+    ref_I = ["HLA-A", "HLA-B", "HLA-C"]
     class_I = []
     for hla in list(hlas):
         hla_gene = hla.split("*")[0]
@@ -63,9 +60,8 @@ def filter_class_II(hlas=[]):
             continue
     return class_I
 
-def parse_hlahd(inFile,
-                hla_class,
-                hlas=[]):
+
+def parse_hlahd(inFile, hla_class, hlas=[]):
     hlas_tmp = []
     csv_reader = csv.reader(inFile, delimiter="\t")
     # inFile.readline()
@@ -73,7 +69,9 @@ def parse_hlahd(inFile,
         if "HLA-" in line[1]:
             if len(line[1].split("-")[1].split(":")[0].split("*")[0]) > 1:
                 hlas_tmp.append(
-                    line[1].split("-")[1].split(":")[0] + ":" + line[1].split(":")[1]
+                    line[1].split("-")[1].split(":")[0]
+                    + ":"
+                    + line[1].split(":")[1]
                     # line[1].split(":")[0] + ":" + line[1].split(":")[1]
                 )
             else:
@@ -81,7 +79,9 @@ def parse_hlahd(inFile,
         if "HLA-" in line[2]:
             if len(line[2].split("-")[1].split(":")[0].split("*")[0]) > 1:
                 hlas_tmp.append(
-                    line[2].split("-")[1].split(":")[0] + ":" + line[2].split(":")[1]
+                    line[2].split("-")[1].split(":")[0]
+                    + ":"
+                    + line[2].split(":")[1]
                     # line[2].split(":")[0] + ":" + line[2].split(":")[1]
                 )
             else:
@@ -397,7 +397,7 @@ if __name__ == "__main__":
                 hla_array = forced_calls(hlaI_array, hlaII_array)
         elif args.force_RNA:
             if not optitype_rna_result:
-                parse_hlahd(hlahd_rna_result, "classI" ,hlaI_array)
+                parse_hlahd(hlahd_rna_result, "classI", hlaI_array)
                 parse_hlahd(hlahd_rna_result, "classII", hlaII_array)
                 hla_array = forced_calls(hlaI_array, hlaII_array)
             else:
@@ -443,4 +443,3 @@ if __name__ == "__main__":
 
     for hla in list(set(valid_hlas)):
         print(hla)
-

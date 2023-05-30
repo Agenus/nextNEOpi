@@ -36,7 +36,19 @@ def get_hlas(in_file, hlas=[]):
 
 
 def filter_class_I(hlas=[]):
-    class_I_genes = ["HLA-A", "HLA-B", "HLA-C", "HLA-E", "HLA-F", "HLA-G", "HLA-H", "HLA-J", "HLA-K", "HLA-L", "HLA-V"]
+    class_I_genes = [
+        "HLA-A",
+        "HLA-B",
+        "HLA-C",
+        "HLA-E",
+        "HLA-F",
+        "HLA-G",
+        "HLA-H",
+        "HLA-J",
+        "HLA-K",
+        "HLA-L",
+        "HLA-V",
+    ]
     class_I_types = ["A", "B", "C", "E", "F", "G", "H", "J", "K", "L", "V"]
     class_II = []
     for hla in list(hlas):
@@ -222,10 +234,14 @@ def out_mhcii(out_file1, out_file2, out_file3, hlas, supported, model_list):
 if __name__ == "__main__":
 
     usage = __doc__.split("\n\n\n")
-    parser = argparse.ArgumentParser(description="Parse HLA-HD output and format it for mixMHC2pred")
+    parser = argparse.ArgumentParser(
+        description="Parse HLA-HD output and format it for mixMHC2pred"
+    )
 
     parser.add_argument("--hlahd_list", required=False, help="HLAs list from HLAHD")
-    parser.add_argument("--output_dir", required=True, help="Path to the output directory")
+    parser.add_argument(
+        "--output_dir", required=True, help="Path to the output directory"
+    )
     parser.add_argument("--sample_name", required=True, help="Sample name")
     parser.add_argument("--supported_list", required=True, help="Supported list")
     parser.add_argument("--model_list", required=True, help="Secondary list")

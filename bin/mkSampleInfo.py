@@ -66,7 +66,6 @@ def parse_tmb(tmb_fh, tmb_info, tmb_type):
             if tmb_type == "coding":
                 tmb_info["TMB_clonal_coding"] = round(float(v.strip()), 3)
 
-
     return tmb_info
 
 

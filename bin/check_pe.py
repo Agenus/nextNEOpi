@@ -31,7 +31,6 @@ def check_pe(bam):
             break
         read_nr += 1
 
-
     samfile.close()
 
     return pe
@@ -44,9 +43,9 @@ nf = 0
 for bam in sys.argv[1:]:
     pe_tmp = check_pe(bam)
     if pe_tmp:
-       pe += 1
+        pe += 1
     else:
-       se += 1
+        se += 1
     nf += 1
 
 if se == nf:

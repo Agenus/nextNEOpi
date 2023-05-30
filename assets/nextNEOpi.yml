@@ -9,6 +9,7 @@ dependencies:
   - bwa
   - samtools
   - gatk4=4.2.6.1
+  - picard=3.0.0
   - fastp
   - fastqc
   - multiqc

@@ -80,10 +80,16 @@ if __name__ == "__main__":
         return open(fname, "w")
 
     parser.add_argument(
-        "--fasta_in", required=True, type=_file_read, help="FASTA file produced by pVACseq generate_protein_fasta"
+        "--fasta_in",
+        required=True,
+        type=_file_read,
+        help="FASTA file produced by pVACseq generate_protein_fasta",
     )
     parser.add_argument(
-        "--fasta_out", required=True, type=_file_write, help="FASTA file with chopped peptides produced by this tool"
+        "--fasta_out",
+        required=True,
+        type=_file_write,
+        help="FASTA file with chopped peptides produced by this tool",
     )
     parser.add_argument(
         "--pep_len",
@@ -94,7 +100,9 @@ if __name__ == "__main__":
         help="peptide length(s) to produce, default [8,9,10,11]",
     )
 
-    parser.add_argument("--version", action="version", version="%(prog)s " + __version__)
+    parser.add_argument(
+        "--version", action="version", version="%(prog)s " + __version__
+    )
 
     args = parser.parse_args()
 

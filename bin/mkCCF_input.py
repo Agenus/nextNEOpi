@@ -96,7 +96,13 @@ def get_segments_seqz(seg_file):
     for line in seg_file:
         line = line.strip()
         fields = line.split("\t")
-        chrom, start_pos, end_pos, n_major, n_minor = [fields[0], fields[1], fields[2], fields[10], fields[11]]
+        chrom, start_pos, end_pos, n_major, n_minor = [
+            fields[0],
+            fields[1],
+            fields[2],
+            fields[10],
+            fields[11],
+        ]
         if chrom != old_chrom:
             i = 0
             old_chrom = chrom
@@ -151,7 +157,9 @@ def is_coding(variant_type):
     return False
 
 
-def make_ccf_calc_input(pat_id, sample_type, vcf_in, segments, purity, min_vaf, write_fh):
+def make_ccf_calc_input(
+    pat_id, sample_type, vcf_in, segments, purity, min_vaf, write_fh
+):
     sampleName = pat_id
     reader = vcf.Reader(vcf_in)
     header_fields = [
@@ -179,7 +187,9 @@ def make_ccf_calc_input(pat_id, sample_type, vcf_in, segments, purity, min_vaf, 
         coding = "T" if is_coding(variant_type) else "F"
 
         chrom_key = (
-            rec.CHROM.lstrip("chr") if (rec.CHROM.startswith("chr")) and not segments["chr_prefix"] else rec.CHROM
+            rec.CHROM.lstrip("chr")
+            if (rec.CHROM.startswith("chr")) and not segments["chr_prefix"]
+            else rec.CHROM
         )
 
         # TODO: deal with chrM
@@ -201,9 +211,28 @@ def make_ccf_calc_input(pat_id, sample_type, vcf_in, segments, purity, min_vaf, 
                 break
 
         if not seg_found:
-            print("WARNING: " + rec.CHROM + ":" + str(rec.POS) + " not within any CN segment: setting cn_minor and cn_major to 1")
+            print(
+                "WARNING: "
+                + rec.CHROM
+                + ":"
+                + str(rec.POS)
+                + " not within any CN segment: setting cn_minor and cn_major to 1"
+            )
 
-        rec_out = [pat_id, sample_type, rec.CHROM, rec.POS, norm_cnt, mut_cnt, vaf, ploidy, cn_a, cn_b, purity, coding]
+        rec_out = [
+            pat_id,
+            sample_type,
+            rec.CHROM,
+            rec.POS,
+            norm_cnt,
+            mut_cnt,
+            vaf,
+            ploidy,
+            cn_a,
+            cn_b,
+            purity,
+            coding,
+        ]
 
         if vaf >= min_vaf:
             write_fh.write("\t".join(map(str, rec_out)) + "\n")
@@ -229,12 +258,30 @@ if __name__ == "__main__":
         """Returns an open file handle if the given filename exists."""
         return open(fname, mode)
 
-    parser.add_argument("--PatientID", required=True, default="", type=str, help="Patient ID")
-    parser.add_argument("--sample_type", required=False, default="Tumor", type=str, help="Sample type string")
-    parser.add_argument("--vcf", required=True, type=str, help="VCF file")
-    parser.add_argument("--seg", required=False, default="", type=str, help="ASCAT segment/cnv file *.cnvs.txt")
     parser.add_argument(
-        "--seg_sequenza", required=False, default="", type=str, help="Sequenza segment/cnv file segments.txt"
+        "--PatientID", required=True, default="", type=str, help="Patient ID"
+    )
+    parser.add_argument(
+        "--sample_type",
+        required=False,
+        default="Tumor",
+        type=str,
+        help="Sample type string",
+    )
+    parser.add_argument("--vcf", required=True, type=str, help="VCF file")
+    parser.add_argument(
+        "--seg",
+        required=False,
+        default="",
+        type=str,
+        help="ASCAT segment/cnv file *.cnvs.txt",
+    )
+    parser.add_argument(
+        "--seg_sequenza",
+        required=False,
+        default="",
+        type=str,
+        help="Sequenza segment/cnv file segments.txt",
     )
     parser.add_argument(
         "--purity",
@@ -249,7 +296,13 @@ if __name__ == "__main__":
         help="Tumor purity as nmuber or sequenza tumor purity file confints_CP.txt",
     )
 
-    parser.add_argument("--min_vaf", required=False, default=0.05, type=float, help="minimum VAF to consider")
+    parser.add_argument(
+        "--min_vaf",
+        required=False,
+        default=0.05,
+        type=float,
+        help="minimum VAF to consider",
+    )
     parser.add_argument(
         "--result_table",
         required=False,
@@ -257,7 +310,9 @@ if __name__ == "__main__":
         type=str,
         help="Output file for CCF calculations input",
     )
-    parser.add_argument("--version", action="version", version="%(prog)s " + __version__)
+    parser.add_argument(
+        "--version", action="version", version="%(prog)s " + __version__
+    )
 
     args = parser.parse_args()
 
@@ -272,11 +327,19 @@ if __name__ == "__main__":
             else get_purity_seqz(_file_read(args.purity_sequenza))
         )
     else:
-        purity = args.purity if is_number(args.purity) else get_purity(_file_read(args.purity))
+        purity = (
+            args.purity
+            if is_number(args.purity)
+            else get_purity(_file_read(args.purity))
+        )
 
     if float(purity) > 1 or float(purity) <= 0 or is_number(purity) is False:
         print(is_number(purity))
-        print("Warning: purity should be 0> p <=1, got: " + str(purity) + " - setting it to 0.75")
+        print(
+            "Warning: purity should be 0> p <=1, got: "
+            + str(purity)
+            + " - setting it to 0.75"
+        )
         purity = "0.75"
 
     if args.seg_sequenza:

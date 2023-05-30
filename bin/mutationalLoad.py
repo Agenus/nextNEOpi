@@ -421,12 +421,12 @@ if __name__ == "__main__":
     )
     output_file.write(
         "Mutational load (variants/Mbps):\t"
-        + str(round(variants["all"] * 10 ** 6 / coverage, 3))
+        + str(round(variants["all"] * 10**6 / coverage, 3))
         + "\n"
     )
     if ccf_file is not None:
         output_file.write(
             "Mutational load clonal (variants/Mbps):\t"
-            + str(round(variants["clonal"] * 10 ** 6 / coverage, 3))
+            + str(round(variants["clonal"] * 10**6 / coverage, 3))
             + "\n"
-    )
+        )

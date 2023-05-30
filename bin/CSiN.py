@@ -34,7 +34,10 @@ def convert_to_df(pvacseq_1_tsv, pvacseq_2_tsv):
         pvacseq_2_reader = pd.read_csv(pvacseq_2_tsv, sep="\t")
         merged_df = pd.DataFrame(pvacseq_2_reader)
         # Rename columns in order for the filters to work
-        merged_df.rename(columns={"NetMHCIIpan MT Percentile": "NetMHCpan MT Percentile"}, inplace=True)
+        merged_df.rename(
+            columns={"NetMHCIIpan MT Percentile": "NetMHCpan MT Percentile"},
+            inplace=True,
+        )
     else:
         pvacseq_1_reader = pd.read_csv(pvacseq_1_tsv, sep="\t")
         pvacseq_1_df = pd.DataFrame(pvacseq_1_reader)
@@ -62,16 +65,32 @@ def sub_csin(c, IC50_cutoff, xp_cutoff, filtered_df):
         for rank in c:
             # Filter dataframe
             filtered_df_tmp = filtered_df
-            filtered_df_tmp = filtered_df_tmp[filtered_df_tmp["NetMHCpan MT Percentile"] < rank]
-            filtered_df_tmp = filtered_df_tmp[filtered_df_tmp["Best MT Score"] < IC50_cutoff]
-            filtered_df_tmp = filtered_df_tmp[filtered_df_tmp["Gene Expression"] > xp_cutoff]
+            filtered_df_tmp = filtered_df_tmp[
+                filtered_df_tmp["NetMHCpan MT Percentile"] < rank
+            ]
+            filtered_df_tmp = filtered_df_tmp[
+                filtered_df_tmp["Best MT Score"] < IC50_cutoff
+            ]
+            filtered_df_tmp = filtered_df_tmp[
+                filtered_df_tmp["Gene Expression"] > xp_cutoff
+            ]
             # Get the VAF and mean VAF, then normilize
             vaf_mean = filtered_df_tmp["Tumor DNA VAF"].mean()
-            filtered_df_tmp["Normalized_VAF"] = filtered_df_tmp["Tumor DNA VAF"].div(vaf_mean)
+            filtered_df_tmp["Normalized_VAF"] = filtered_df_tmp["Tumor DNA VAF"].div(
+                vaf_mean
+            )
             # Get the load and mean load, then normilize
-            temp = filtered_df_tmp.groupby(["Chromosome", "Start", "Stop"]).size().reset_index(name="vcf_load_count")
+            temp = (
+                filtered_df_tmp.groupby(["Chromosome", "Start", "Stop"])
+                .size()
+                .reset_index(name="vcf_load_count")
+            )
             vcf_load = temp["vcf_load_count"].mean()
-            filtered_df_tmp["Normalized_load"] = filtered_df_tmp.groupby("Start")["Start"].transform("count").div(vcf_load)
+            filtered_df_tmp["Normalized_load"] = (
+                filtered_df_tmp.groupby("Start")["Start"]
+                .transform("count")
+                .div(vcf_load)
+            )
             # Calculate "Sub-CSiN" and multiply by the a (=10) constant
             mult = filtered_df_tmp.Normalized_VAF * filtered_df_tmp.Normalized_load
             sub_csin = math.log(mult.mean()) * 10
@@ -90,10 +109,17 @@ def csin(output, mhci_sub=None, mhcii_sub=None, merged_sub=None):
     elif not mhcii_sub:
         mhc_i, mhc_ii, merged = np.mean(mhci_sub), "NA", "NA"
     else:
-        mhc_i, mhc_ii, merged = np.mean(mhci_sub), np.mean(mhcii_sub), np.mean(merged_sub)
+        mhc_i, mhc_ii, merged = (
+            np.mean(mhci_sub),
+            np.mean(mhcii_sub),
+            np.mean(merged_sub),
+        )
     # Print final output
     with open(output, "w") as out:
-        out.write("MHC I CSiN = %s\n\nMHC II CSiN = %s\n\nTotal CSiN = %s" % (mhc_i, mhc_ii, merged))
+        out.write(
+            "MHC I CSiN = %s\n\nMHC II CSiN = %s\n\nTotal CSiN = %s"
+            % (mhc_i, mhc_ii, merged)
+        )
 
 
 if __name__ == "__main__":
@@ -101,8 +127,12 @@ if __name__ == "__main__":
     usage = __doc__.split("\n\n\n")
     parser = argparse.ArgumentParser(description="Calculate CSiN")
 
-    parser.add_argument("--MHCI_tsv", required=False, help="Input unfiltered pVACseq merged TSV files")
-    parser.add_argument("--MHCII_tsv", required=False, help="Input unfiltered pVACseq merged TSV files")
+    parser.add_argument(
+        "--MHCI_tsv", required=False, help="Input unfiltered pVACseq merged TSV files"
+    )
+    parser.add_argument(
+        "--MHCII_tsv", required=False, help="Input unfiltered pVACseq merged TSV files"
+    )
     parser.add_argument(
         "--rank",
         required=True,

@@ -31,7 +31,14 @@ from vcf.parser import _Info
 from vcf.utils import walk_together
 
 
-def make_hc_somatic_vars(f_primary, primary_caller_name, f_confirming, confirming_caller_names_, fout, fout_single):
+def make_hc_somatic_vars(
+    f_primary,
+    primary_caller_name,
+    f_confirming,
+    confirming_caller_names_,
+    fout,
+    fout_single,
+):
     """Picks the given VARs from the priority vcf to a new
     VCF if they are confirmed by one of the others."""
 
@@ -44,14 +51,21 @@ def make_hc_somatic_vars(f_primary, primary_caller_name, f_confirming, confirmin
         confirming_reader.append(vcf.Reader(f))
 
     primary_reader.infos["VariantCalledBy"] = _Info(
-        "VariantCalledBy", ".", "String", "variant callers that called the variant", "caller ", "0.1"
+        "VariantCalledBy",
+        ".",
+        "String",
+        "variant callers that called the variant",
+        "caller ",
+        "0.1",
     )
 
     # some sanity checks
     sorted_primary_contigs = sorted(primary_reader.contigs.keys())
     for cr in confirming_reader:
         if sorted(primary_reader.samples) != sorted(cr.samples):
-            raise ValueError("Input VCF files must have the same sample column " "headers.")
+            raise ValueError(
+                "Input VCF files must have the same sample column " "headers."
+            )
         if sorted_primary_contigs != sorted(cr.contigs.keys()):
             raise ValueError("Input VCF files must denote the same contigs.")
 
@@ -67,8 +81,13 @@ def make_hc_somatic_vars(f_primary, primary_caller_name, f_confirming, confirmin
         if primary_rec is not None:
             confirmed_idx = [i for i, x in enumerate(confirming_recs) if x is not None]
             if len(confirmed_idx) > 0:
-                confirming_caller_names = ",".join(confirming_caller_names_[i] for i in confirmed_idx)
-                primary_rec.add_info("VariantCalledBy", primary_caller_name + "," + confirming_caller_names)
+                confirming_caller_names = ",".join(
+                    confirming_caller_names_[i] for i in confirmed_idx
+                )
+                primary_rec.add_info(
+                    "VariantCalledBy",
+                    primary_caller_name + "," + confirming_caller_names,
+                )
                 confirmed = True
             else:
                 primary_rec.add_info("VariantCalledBy", primary_caller_name)
@@ -108,7 +127,10 @@ if __name__ == "__main__":
         help="VCF file from which variants are kept when confirmed by any other vcf in --confirming",
     )
     parser.add_argument(
-        "--primary_name", required=True, type=str, help="Name of the primary variant caller",
+        "--primary_name",
+        required=True,
+        type=str,
+        help="Name of the primary variant caller",
     )
     parser.add_argument(
         "--confirming",
@@ -118,10 +140,17 @@ if __name__ == "__main__":
         help="VCF files used to confirm variants in --primary",
     )
     parser.add_argument(
-        "--confirming_names", required=True, type=str, nargs="*", help="Names of the confirming variant callers",
+        "--confirming_names",
+        required=True,
+        type=str,
+        nargs="*",
+        help="Names of the confirming variant callers",
     )
     parser.add_argument(
-        "--out_vcf", required=True, type=_file_write, help="VCF file for confirmed vars produced by " "this tool"
+        "--out_vcf",
+        required=True,
+        type=_file_write,
+        help="VCF file for confirmed vars produced by " "this tool",
     )
     parser.add_argument(
         "--out_single_vcf",
@@ -130,12 +159,19 @@ if __name__ == "__main__":
         help="VCF file for unconfirmed vars produced by " "this tool",
     )
 
-    parser.add_argument("--version", action="version", version="%(prog)s " + __version__)
+    parser.add_argument(
+        "--version", action="version", version="%(prog)s " + __version__
+    )
 
     args = parser.parse_args()
 
     var_count = make_hc_somatic_vars(
-        args.primary, args.primary_name, args.confirming, args.confirming_names, args.out_vcf, args.out_single_vcf
+        args.primary,
+        args.primary_name,
+        args.confirming,
+        args.confirming_names,
+        args.out_vcf,
+        args.out_single_vcf,
     )
 
     print("Total confirmed:\t" + str(var_count))

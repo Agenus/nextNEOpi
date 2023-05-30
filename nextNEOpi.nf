@@ -37,13 +37,23 @@ log.info "Please check --help for further instruction"
 log.info "-------------------------------------------------------------------------"
 
 // Check if License(s) were accepted
-params.accept_license = false
+params.accept_license = true
 
-if (params.accept_license) {
-    acceptLicense()
-} else {
-    checkLicense()
+// if (params.accept_license) {
+//     acceptLicense()
+// } else {
+//     checkLicense()
+// }
+
+if (params.omics) {
+    def outputDir    = params.outputDir.replaceAll("s3://", "")
+    params.outputDir = "/mnt/workflow/pubdir/"
+    tracedir         = "/mnt/workflow/pubdir/pipeline_info"
 }
+
+
+def nextneopi_conda = "${baseDir}/assets/nextNEOpi.yml"
+def rigscore_conda = "${baseDir}/assets/rigscore.yml"
 
 /*
 ________________________________________________________________________________
@@ -75,13 +85,15 @@ if (params.enable_conda) {
 }
 
 // check IEDB dir
-check_iedb_dir(params.databases.IEDB_dir)
+// check_iedb_dir(params.databases.IEDB_dir)
 
 // check MHCflurry dir
-check_mhcflurry_dir(params.databases.MHCFLURRY_dir)
+// check_mhcflurry_dir(params.databases.MHCFLURRY_dir)
 
 // create tmp dir and make sure we have the realpath for it
-tmpDir = mkTmpDir(params.tmpDir)
+// tmpDir = mkTmpDir(params.tmpDir)
+tmpDir = params.tmpDir
+
 
 /*--------------------------------------------------
   For workflow summary
@@ -130,11 +142,10 @@ summary['VEP options']                   = params.vep_options
 summary['Number of scatters']            = params.scatter_count
 summary['Output dir']                    = params.outputDir
 summary['Working dir']                   = workflow.workDir
-summary['TMP dir']                       = tmpDir
-summary['Current home']                  = "$HOME"
-summary['Current user']                  = "$USER"
-summary['Current path']                  = "$PWD"
-summary['JAVA_Xmx']                      = params.JAVA_Xmx
+// summary['TMP dir']                       = params.tmpDir
+// summary['Current home']                  = "$HOME"
+// summary['Current user']                  = "$USER"
+// summary['Current path']                  = "$PWD"
 summary['Picard maxRecordsInRam']        = params.maxRecordsInRam
 summary['Script dir']                    = workflow.projectDir
 summary['Config Profile']                = workflow.profile
@@ -264,9 +275,10 @@ for ( row in batchCSV ) {
 
     if (! row.bam) {
         meta.libType = "SE"
-        if (row.reads1) { reads.add(file(row.reads1, checkIfExists: true)) }
+        // for data stored in s3 checkIfExists = false
+        if (row.reads1) { reads.add(file(row.reads1, checkIfExists: false)) }
         if (row.reads2) {
-            reads.add(file(row.reads2, checkIfExists: true))
+            reads.add(file(row.reads2, checkIfExists: false))
             meta.libType = "PE"
         }
         if (meta.sampleType != "tumor_RNA") {
@@ -280,7 +292,7 @@ for ( row in batchCSV ) {
         }
         raw_data.add([meta, reads])
     } else {
-        raw_data.add([meta, file(row.bam, checkIfExists: true)])
+        raw_data.add([meta, file(row.bam, checkIfExists: false)])
     }
 
 }
@@ -339,14 +351,14 @@ MiXMHC2PRED   = ( params.MiXMHC2PRED != "" ) ? file(params.MiXMHC2PRED) : ""
 have_HLAHD = false
 run_OptiType = (params.disable_OptiType) ? false : true
 
-if (params.HLAHD_DIR != "") {
-    HLAHD = file(params.HLAHD_DIR + "/bin/hlahd.sh")
-    if (checkToolAvailable(HLAHD, "exists", "warn")) {
-        HLAHD_DIR  = file(params.HLAHD_DIR)
-        HLAHD_PATH = HLAHD_DIR + "/bin"
-        have_HLAHD = true
-    }
-}
+// if (params.HLAHD_DIR != "") {
+//     HLAHD = file(params.HLAHD_DIR + "/bin/hlahd.sh")
+//     if (checkToolAvailable(HLAHD, "exists", "warn")) {
+//         HLAHD_DIR  = file(params.HLAHD_DIR)
+//         HLAHD_PATH = HLAHD_DIR + "/bin"
+//         have_HLAHD = true
+//     }
+// }
 if (! have_HLAHD && run_OptiType) {
     log.warn "WARNING: HLAHD not available - can not predict Class II neoepitopes"
 } else if (! have_HLAHD && ! run_OptiType && use_custom_hlas) {
@@ -356,58 +368,27 @@ if (! have_HLAHD && run_OptiType) {
 }
 
 // check if all tools are installed when not running conda or singularity
-have_vep = false
-if (! workflow.profile.contains('conda') && ! workflow.profile.contains('singularity')) {
-    def execTools = ["fastqc", "fastp", "bwa", "samtools", "sambamba", "gatk", "vep", "bam-readcount",
-                     "perl", "bgzip", "tabix", "bcftools", "yara_mapper", "python", "cnvkit.py",
-                     "OptiTypePipeline.py", "alleleCounter", "freec", "Rscript", "java", "multiqc",
-                     "sequenza-utils"]
-
-    for (tool in execTools) {
-        checkToolAvailable(tool, "inPath", "error")
-    }
-
-    VARSCAN = "java " + params.JAVA_Xmx + " -jar " + file(params.VARSCAN)
-    have_vep = true
-} else {
-    VARSCAN = "varscan " + params.JAVA_Xmx
-}
+// have_vep = false
+have_vep = true
+VARSCAN = "varscan "
 
 // check if we have mutect1 installed
-have_Mutect1 = false
-if (params.MUTECT1 != "" && file(params.MUTECT1) && params.JAVA7 != "" && file(params.JAVA7)) {
-    if(checkToolAvailable(params.JAVA7, "exists", "warn") && checkToolAvailable(params.MUTECT1, "exists", "warn")) {
-        JAVA7 = file(params.JAVA7)
-        MUTECT1 = file(params.MUTECT1)
-        have_Mutect1 = true
-    }
-}
+// have_Mutect1 = false
+have_Mutect1 = true
 
 // check if we have GATK3 installed
-have_GATK3 = false
-if (params.GATK3 != "" && file(params.GATK3) && params.JAVA8 != "" && file(params.JAVA8) && ! workflow.profile.contains('conda') && ! workflow.profile.contains('singularity')) {
-    if(checkToolAvailable(params.JAVA8, "inPath", "warn") && checkToolAvailable(params.GATK3, "exists", "warn")) {
-        JAVA8 = file(params.JAVA8)
-        GATK3 = file(params.GATK3)
-        have_GATK3 = true
-    }
-} else if (workflow.profile.contains('singularity')) {
-    JAVA8 = "java"
-    GATK3 = "/usr/local/opt/gatk-3.8/GenomeAnalysisTK.jar"
-    have_GATK3 = true
-} else if (workflow.profile.contains('conda')) {
-    JAVA8 = "java"
-    GATK3 = "\$CONDA_PREFIX/opt/gatk-3.8/GenomeAnalysisTK.jar"
-    have_GATK3 = true
-}
-
+// have_GATK3 = false
+have_GATK3 = true
+JAVA8 = "java"
+GATK3 = "/opt/conda/envs/nextNEOpi/bin/GenomeAnalysisTK.jar"
 
 // check MIXCR licence
-if (params.TCR && params.MIXCR_lic != "") {
-    checkToolAvailable(params.MIXCR_lic, "exists", "error")
-} else if (params.TCR && params.MIXCR_lic == "") {
-    exit 1, "ERROR: no MiXCR license file specified, please provide a MiXCR license file in params.config or by using the --MIXCR_lic option.\nIf you do not have a MiXCR license you may:\n\ta) run nextNEOpi with --TCR false\n\tb) request one at https://licensing.milaboratories.com"
-}
+// TODO Do we need this?
+// if (params.TCR && params.MIXCR_lic != "") {
+// //     checkToolAvailable(params.MIXCR_lic, "exists", "error")
+// } else if (params.TCR && params.MIXCR_lic == "") {
+//     exit 1, "ERROR: no MiXCR license file specified, please provide a MiXCR license file in params.config or by using the --MIXCR_lic option.\nIf you do not have a MiXCR license you may:\n\ta) run nextNEOpi with --TCR false\n\tb) request one at https://licensing.milaboratories.com"
+// }
 
 /*
 ________________________________________________________________________________
@@ -425,9 +406,13 @@ ________________________________________________________________________________
 // Handle BAM input files. We need to convert BAMs to Fastq
 if(bamInput) {
     process check_PE {
-        label 'nextNEOpiENV'
-
         tag "$meta.sampleName : $meta.sampleType"
+        debug true
+
+        label 'process_medium'
+        container "${params.nextneopi_container}"
+
+        publishDir "${params.outputDir}"
 
         input:
         tuple(
@@ -453,9 +438,11 @@ if(bamInput) {
 
 
     process bam2fastq {
-        label 'nextNEOpiENV'
-
         tag "$meta.sampleName : $meta.sampleType"
+        debug true
+        label 'process_large'
+
+        container "${params.nextneopi_container}"
 
         publishDir "${params.outputDir}/analyses/${meta.sampleName}/01_preprocessing",
             mode: publishDirMode
@@ -483,7 +470,8 @@ if(bamInput) {
         meta.libType = libType
         if (libType == "PE")
             """
-            samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -l 0 -n ${bam} | \\
+            samtools sort -@ ${task.cpus} \\
+            -l 0 -n ${bam} | \\
             samtools fastq \\
                 -@ ${task.cpus} \\
                 -c 5 \\
@@ -509,8 +497,12 @@ if(bamInput) {
 
 // merge multi run or multi lane sample fastq
 process merge_fastq {
-
     tag "$meta.sampleName : $meta.sampleType"
+    debug true
+
+    label 'process_medium'
+
+    container "${params.nextneopi_container}"
 
     publishDir "${params.outputDir}/${meta.sampleName}/01_preprocessing/",
         mode: publishDirMode,
@@ -528,6 +520,7 @@ process merge_fastq {
 
     output:
     tuple val(meta), path("*_R{1,2}.merged.fastq.gz") into merged_fastq_ch
+    // fsspec s3:// local:// gcs://
 
     script:
     def prefix = meta.sampleName + "_" + meta.sampleType
@@ -537,24 +530,68 @@ process merge_fastq {
     """
 }
 
-
 // here we have our final raw fastq files:
 // merged if multi lane runs are used
 // bam2fastq if bam files are used
 (raw_reads_ch, fastqc_reads_ch) = merged_fastq_ch.mix(fastq_ch.single, bam_fastq_ch).into(2)
 
+// FastQC
+process FastQC {
+    tag "$meta.sampleName : $meta.sampleType"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
+
+    publishDir "${params.outputDir}/analyses/${meta.sampleName}/QC/fastqc",
+        mode: publishDirMode,
+        saveAs: { filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
+
+    input:
+    tuple val(meta), path(reads) from fastqc_reads_ch
 
 
+    output:
+    tuple val(meta), path("*_fastqc.zip") into ch_fastqc // multiQC
+
+    script:
+    def reads_R1_ext = (reads[0].getExtension() == "gz") ? "fastq.gz" : reads[0].getExtension()
+    def reads_R1     = meta.sampleName + "_" + meta.sampleType + "_R1." + reads_R1_ext
+
+    // do we have PE reads?
+    def reads_R2 = "_missing_"
+    if(meta.libType == "PE") {
+        def reads_R2_ext = (reads[1].getExtension() == "gz") ? "fastq.gz" : reads[1].getExtension()
+        reads_R2     = meta.sampleName + "_" + meta.sampleType + "_R2." + reads_R2_ext
+    }
+    """
+    if [ ! -e ${reads_R1} ]; then
+        ln -s ${reads[0]} ${reads_R1}
+    fi
+
+    if [ "${reads_R2}" != "_missing_" ] && [ ! -e ${reads_R2} ]; then
+        ln -s ${reads[1]} ${reads_R2}
+    fi
+
+    fastqc --threads ${task.cpus} \\
+        ${reads_R1} ${reads_R2}
+    """
+}
+
+// *****************************************************
+// Preprocess the reference
+// *****************************************************
 // Common region files preparation for faster processing
 if (params.WES) {
     process 'RegionsBedToIntervalList' {
-
-        label 'nextNEOpiENV'
-
         tag 'RegionsBedToIntervalList'
+        debug true
 
         publishDir "$params.outputDir/supplemental/00_prepare_Intervals/",
             mode: publishDirMode
+
+        label 'process_medium'
+        container "${params.nextneopi_container}"
 
         input:
         tuple(
@@ -574,8 +611,15 @@ if (params.WES) {
         )
 
         script:
+        def avail_mem = 30072
+        if (!task.memory) {
+            log.info '[GATK BedToIntervalListm] Available memory not known - defaulting to 30GB. Specify process memory requirements to change this.'
+        } else {
+            avail_mem = (task.memory.mega*0.8).intValue()
+        }
+    //     gatk --java-options "-Xmx${avail_mem}M"
         """
-        gatk --java-options ${params.JAVA_Xmx} BedToIntervalList \\
+        gatk BedToIntervalList \\
             -I ${RegionsBed} \\
             -O ${RegionsBed.baseName}.interval_list \\
             -SD $RefDict
@@ -583,12 +627,13 @@ if (params.WES) {
     }
 
     process 'BaitsBedToIntervalList' {
-
-        label 'nextNEOpiENV'
-
         tag 'BaitsBedToIntervalList'
+        debug true
 
-        publishDir "$params.outputDir/supplemental/00_prepare_Intervals/",
+        label "process_medium"
+        container "${params.gatk4_container}"
+
+        publishDir "${params.outputDir}/supplemental/00_prepare_Intervals/",
             mode: publishDirMode
 
         input:
@@ -606,8 +651,15 @@ if (params.WES) {
         ) into BaitsBedToIntervalList_out_ch0
 
         script:
+        def avail_mem = 30072
+        if (!task.memory) {
+            log.info '[GATK BedToIntervalListm] Available memory not known - defaulting to 30GB. Specify process memory requirements to change this.'
+        } else {
+            avail_mem = (task.memory.mega*0.8).intValue()
+        }
+    //     gatk --java-options "-Xmx${avail_mem}M"
         """
-        gatk --java-options ${params.JAVA_Xmx} BedToIntervalList \\
+        gatk BedToIntervalList \\
             -I ${BaitsBed} \\
             -O ${BaitsBed.baseName}.interval_list \\
             -SD $RefDict
@@ -620,10 +672,11 @@ if (params.WES) {
 }
 
 process 'preprocessIntervalList' {
-
-    label 'nextNEOpiENV'
-
     tag 'preprocessIntervalList'
+    debug true
+
+    label "process_medium"
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/supplemental/00_prepare_Intervals/",
         mode: publishDirMode
@@ -656,6 +709,13 @@ process 'preprocessIntervalList' {
     )
 
     script:
+        def avail_mem = 30072
+        if (!task.memory) {
+            log.info '[GATK BedToIntervalListm] Available memory not known - defaulting to 30GB. Specify process memory requirements to change this.'
+        } else {
+            avail_mem = (task.memory.mega*0.8).intValue()
+        }
+    //     gatk --java-options "-Xmx${avail_mem}M"
     if(params.WES)
         """
         gatk PreprocessIntervals \\
@@ -668,7 +728,7 @@ process 'preprocessIntervalList' {
         """
     else
         """
-        gatk --java-options ${params.JAVA_Xmx} ScatterIntervalsByNs \\
+        gatk ScatterIntervalsByNs \\
             --REFERENCE $RefFasta \\
             --OUTPUT_TYPE ACGT \\
             --OUTPUT ${interval_list.baseName}_merged_padded.interval_list
@@ -677,10 +737,11 @@ process 'preprocessIntervalList' {
 
 // Splitting interval file in 20(default) files for scattering Mutect2
 process 'SplitIntervals' {
-
-    label 'nextNEOpiENV'
-
     tag "SplitIntervals"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/supplemental/00_prepare_Intervals/SplitIntervals/",
         mode: publishDirMode,
@@ -722,17 +783,14 @@ process 'SplitIntervals' {
     script:
     IntervalName = IntervalsList.baseName
     """
-    mkdir -p ${tmpDir}
-
     gatk SplitIntervals \\
-        --tmp-dir ${tmpDir} \\
+        --tmp-dir . \\
         -R ${RefFasta}  \\
         -scatter ${x} \\
         --interval-merging-rule ALL \\
         --subdivision-mode BALANCING_WITHOUT_INTERVAL_SUBDIVISION_WITH_OVERFLOW \\
         -L ${IntervalsList} \\
         -O ${IntervalName}
-
     """
 }
 
@@ -740,10 +798,11 @@ process 'SplitIntervals' {
 // convert padded interval list to Bed file (used by varscan)
 // generate a padded tabix indexed region BED file for strelka
 process 'IntervalListToBed' {
-
-    label 'nextNEOpiENV'
-
     tag 'BedFromIntervalList'
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/supplemental/00_prepare_Intervals/",
         mode: publishDirMode
@@ -758,8 +817,14 @@ process 'IntervalListToBed' {
     )
 
     script:
+    def avail_mem = 30072
+    if (!task.memory) {
+        log.info '[GATK IntervalListToBed] Available memory not known - defaulting to 30GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
     """
-    gatk --java-options ${params.JAVA_Xmx} IntervalListToBed \\
+    gatk --java-options "-Xmx${avail_mem}M" IntervalListToBed \\
         -I ${paddedIntervalList} \\
         -O ${paddedIntervalList.baseName}.bed
 
@@ -770,10 +835,12 @@ process 'IntervalListToBed' {
 
 // convert scattered padded interval list to Bed file (used by varscan)
 process 'ScatteredIntervalListToBed' {
-
-    label 'nextNEOpiENV'
-
     tag 'ScatteredIntervalListToBed'
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
+
 
     publishDir "$params.outputDir/supplemental/00_prepare_Intervals/SplitIntervals/${IntervalName}",
         mode: publishDirMode,
@@ -798,53 +865,16 @@ process 'ScatteredIntervalListToBed' {
     )
 
     script:
-    """
-    gatk --java-options ${params.JAVA_Xmx} IntervalListToBed \\
-        -I ${IntervalsList} \\
-        -O ${IntervalsList.baseName}.bed
-    """
-}
-
-// FastQC
-process FastQC {
-
-    label 'nextNEOpiENV'
-
-    tag "$meta.sampleName : $meta.sampleType"
-
-    publishDir "${params.outputDir}/analyses/${meta.sampleName}/QC/fastqc",
-        mode: publishDirMode,
-        saveAs: { filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
-
-
-    input:
-    tuple val(meta), path(reads) from fastqc_reads_ch
-
-
-    output:
-    tuple val(meta), path("*_fastqc.zip") into ch_fastqc // multiQC
-
-    script:
-    def reads_R1_ext = (reads[0].getExtension() == "gz") ? "fastq.gz" : reads[0].getExtension()
-    def reads_R1     = meta.sampleName + "_" + meta.sampleType + "_R1." + reads_R1_ext
-
-    // do we have PE reads?
-    def reads_R2 = "_missing_"
-    if(meta.libType == "PE") {
-        def reads_R2_ext = (reads[1].getExtension() == "gz") ? "fastq.gz" : reads[1].getExtension()
-        reads_R2     = meta.sampleName + "_" + meta.sampleType + "_R2." + reads_R2_ext
+    def avail_mem = 30072
+    if (!task.memory) {
+        log.info '[GATK IntervalListToBed] Available memory not known - defaulting to 30GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
     }
     """
-    if [ ! -e ${reads_R1} ]; then
-        ln -s ${reads[0]} ${reads_R1}
-    fi
-
-    if [ "${reads_R2}" != "_missing_" ] && [ ! -e ${reads_R2} ]; then
-        ln -s ${reads[1]} ${reads_R2}
-    fi
-
-    fastqc --quiet --threads ${task.cpus} \\
-        ${reads_R1} ${reads_R2}
+    gatk --java-options "-Xmx${avail_mem}M" IntervalListToBed \\
+        -I ${IntervalsList} \\
+        -O ${IntervalsList.baseName}.bed
     """
 }
 
@@ -891,10 +921,11 @@ if (params.trim_adapters || params.trim_adapters_RNAseq) {
 
 if (trim_adapters) {
     process fastp {
-
-        label 'nextNEOpiENV'
-
         tag "$meta.sampleName : $meta.sampleType"
+        debug true
+
+        label 'process_medium'
+        container "${params.nextneopi_container}"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/",
             mode: publishDirMode,
@@ -974,10 +1005,11 @@ if (trim_adapters) {
 
     // FastQC after adapter trimming
     process FastQC_trimmed {
-
-        label 'nextNEOpiENV'
-
         tag "$meta.sampleName : $meta.sampleType"
+        debug true
+
+        label 'process_medium'
+        container "${params.nextneopi_container}"
 
         publishDir "${params.outputDir}/analyses/${meta.sampleName}/QC/fastqc",
             mode: publishDirMode,
@@ -1018,6 +1050,9 @@ reads_ch.branch {
 .set{ reads_ch }
 
 (reads_BAM_ch, reads_uBAM_ch, reads_mixcr_DNA_ch, dummy_ch) = reads_ch.DNA.into(4)
+
+// reads_uBAM_ch.view()
+
 (reads_tumor_optitype_ch, reads_tumor_hlahd_RNA_ch, reads_tumor_neofuse_ch, reads_tumor_mixcr_RNA_ch) = reads_ch.RNA.into(4)
 
 reads_mixcr_ch = reads_mixcr_DNA_ch.mix(reads_tumor_mixcr_RNA_ch)
@@ -1035,10 +1070,11 @@ dummy_ch.filter{
 
 // make uBAM
 process 'make_uBAM' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName : $meta.sampleType"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/01_preprocessing/",
         mode: publishDirMode
@@ -1054,13 +1090,17 @@ process 'make_uBAM' {
     def read_group = meta.sampleName + "_" + meta.sampleType.replaceAll("_DNA", "")
     def reads_in = "-F1 " + reads[0]
     reads_in += (meta.libType == "PE") ? " -F2 " + reads[1] : ""
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def avail_mem = 30072
+    if (!task.memory) {
+        log.info '[GATK FastqToSam] Available memory not known - defaulting to 30GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
+//     gatk --java-options "-Xmx${avail_mem}M"
 
     """
-    mkdir -p ${tmpDir}
-    gatk --java-options ${java_opts} FastqToSam \\
-        --TMP_DIR ${tmpDir} \\
-        --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} \\
+    gatk --java-options "-Xmx${avail_mem}M" FastqToSam \\
+        --TMP_DIR . \\
         ${reads_in} \\
         --READ_GROUP_NAME ${read_group} \\
         --SAMPLE_NAME ${read_group} \\
@@ -1072,11 +1112,13 @@ process 'make_uBAM' {
 
 // Aligning reads to reference, sort and index; create BAMs
 process 'Bwa' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName : $meta.sampleType"
+    debug true
 
+    label 'process_high'
+    container "${params.nextneopi_container}"
+
+    cache 'lenient'
     publishDir "$params.outputDir/analyses/${meta.sampleName}/02_alignments/",
         mode: publishDirMode
 
@@ -1103,6 +1145,13 @@ process 'Bwa' {
     def read_group = meta.sampleName + "_" + meta.sampleType.replaceAll("_DNA", "")
 
     def sort_threads = (task.cpus.compareTo(8) == 1) ? 8 : task.cpus
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[BWA] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        log.info "[BWA] Available memory  - ${task.memory}."
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
     """
     bwa mem \\
         -R "@RG\\tID:${read_group}\\tLB:${read_group}\\tSM:${read_group}\\tPL:ILLUMINA" \\
@@ -1113,10 +1162,9 @@ process 'Bwa' {
     samtools view -@2 -Shbu - | \\
     sambamba sort \\
         --sort-picard \\
-        --tmpdir=${tmpDir} \\
-        -m ${params.SB_sort_mem} \\
+        --tmpdir=. \\
         -l 6 \\
-        -t ${sort_threads} \\
+        -t ${task.cpus} \\
         -o ${bam} \\
         /dev/stdin
     """
@@ -1124,11 +1172,13 @@ process 'Bwa' {
 
 // merge alinged BAM and uBAM
 process 'merge_uBAM_BAM' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName : $meta.sampleType"
+    label 'process_high'
+    debug true
 
+    container "${params.nextneopi_container}"
+
+    cache 'lenient'
     publishDir "$params.outputDir/analyses/${meta.sampleName}/02_alignments/",
         mode: publishDirMode,
         enabled: params.fullOutput
@@ -1153,12 +1203,15 @@ process 'merge_uBAM_BAM' {
     procSampleName = meta.sampleName + "_" + meta.sampleType
 
     def paired_run = (meta.libType == 'SE') ? 'false' : 'true'
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[GATK MergeBamAlignment] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
     """
-    mkdir -p ${tmpDir}
-
-    gatk --java-options ${java_opts} MergeBamAlignment \\
-        --TMP_DIR ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M" MergeBamAlignment \\
+        --TMP_DIR . \\
         --VALIDATION_STRINGENCY SILENT \\
         --EXPECTED_ORIENTATIONS FR \\
         --ATTRIBUTES_TO_RETAIN X0 \\
@@ -1184,10 +1237,10 @@ process 'merge_uBAM_BAM' {
 
 // Mark duplicates with sambamba
 process 'MarkDuplicates' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName : $meta.sampleType"
+    debug true
+    label 'process_high'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/02_alignments/",
         mode: publishDirMode
@@ -1220,11 +1273,16 @@ process 'MarkDuplicates' {
     script:
     def procSampleName = meta.sampleName + "_" + meta.sampleType
     bam_out = [procSampleName + "_aligned_sort_mkdp.bam", procSampleName + "_aligned_sort_mkdp.bai"]
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[SAMBAMBA_MARKDUP] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
     """
-    mkdir -p ${tmpDir}
     sambamba markdup \\
         -t ${task.cpus} \\
-        --tmpdir ${tmpDir} \\
+        --tmpdir . \\
         --hash-table-size=${params.SB_hash_table_size } \\
         --overflow-list-size=${params.SB_overflow_list_size} \\
         --io-buffer-size=${params.SB_io_buffer_size} \\
@@ -1232,21 +1290,20 @@ process 'MarkDuplicates' {
         /dev/stdout | \\
     samtools sort \\
         -@${task.cpus} \\
-        -m ${params.STperThreadMem} \\
         -O BAM \\
         -l 0 \\
         /dev/stdin | \\
-    gatk --java-options ${params.JAVA_Xmx} SetNmMdAndUqTags \\
-        --TMP_DIR ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M" SetNmMdAndUqTags \\
+        --TMP_DIR . \\
         -R ${RefFasta} \\
         -I /dev/stdin \\
         -O ${procSampleName}_aligned_sort_mkdp.bam \\
         --CREATE_INDEX true \\
         --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} \\
         --VALIDATION_STRINGENCY LENIENT
-
     """
 }
+
 
 // prepare channel for mhc_extract -> hlad-hd, optitype
  MarkDuplicates_out_ch3.filter {
@@ -1274,10 +1331,11 @@ MarkDuplicates_out_CNVkit_ch0 = MarkDuplicates_out_ch4.tumor.join(MarkDuplicates
 if(params.WES) {
     // Generate HS metrics using picard
     process 'alignmentMetrics' {
-
-        label 'nextNEOpiENV'
-
         tag "$meta.sampleName : $meta.sampleType"
+        debug true
+
+        label 'process_long'
+        container "${params.nextneopi_container}"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/QC/alignments/",
             mode: publishDirMode
@@ -1301,20 +1359,24 @@ if(params.WES) {
 
         script:
         procSampleName = meta.sampleName + "_" + meta.sampleType
-        def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+        def avail_mem = 60072
+        if (!task.memory) {
+            log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+        } else {
+            avail_mem = (task.memory.mega*0.8).intValue()
+        }
 
         """
-        mkdir -p ${tmpDir}
-        gatk --java-options ${java_opts} CollectHsMetrics \\
-            --TMP_DIR ${tmpDir} \\
+        gatk --java-options "-Xmx${avail_mem}M" CollectHsMetrics \\
+            --TMP_DIR . \\
             --INPUT ${bam[0]} \\
             --OUTPUT ${procSampleName}.HS.metrics.txt \\
             -R ${RefFasta} \\
             --BAIT_INTERVALS ${BaitIntervalsList} \\
             --TARGET_INTERVALS ${IntervalsList} \\
             --PER_TARGET_COVERAGE ${procSampleName}.perTarget.coverage.txt && \\
-        gatk --java-options ${java_opts} CollectAlignmentSummaryMetrics \\
-            --TMP_DIR ${tmpDir} \\
+        gatk --java-options "-Xmx${avail_mem}M" CollectAlignmentSummaryMetrics \\
+            --TMP_DIR . \\
             --INPUT ${bam[0]} \\
             --OUTPUT ${procSampleName}.AS.metrics.txt \\
             -R ${RefFasta} &&
@@ -1333,10 +1395,14 @@ if(params.WES) {
  ApplyBQSR (GATK4): apply BQSR table to reads
 */
 process 'scatterBaseRecalGATK4' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName : $meta.sampleType"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
+
+    publishDir "$params.outputDir/analyses/${meta.sampleName}/gatk4_scatter_base_recal",
+        mode: publishDirMode
 
     input:
     tuple(
@@ -1381,10 +1447,16 @@ process 'scatterBaseRecalGATK4' {
 
     script:
     procSampleName = meta.sampleName + "_" + meta.sampleType
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[GATK4 BaseRecalibrator] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
+
     """
-    mkdir -p ${tmpDir}
-    gatk  --java-options ${params.JAVA_Xmx} BaseRecalibrator \\
-        --tmp-dir ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M" BaseRecalibrator \\
+        --tmp-dir . \\
         -I ${bam[0]} \\
         -R ${RefFasta} \\
         -L ${intervals} \\
@@ -1397,10 +1469,11 @@ process 'scatterBaseRecalGATK4' {
 
 // gather scattered bqsr tables
 process 'gatherGATK4scsatteredBQSRtables' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName : $meta.sampleType"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/${meta.sampleName}/03_baserecalibration/",
         mode: publishDirMode,
@@ -1416,8 +1489,6 @@ process 'gatherGATK4scsatteredBQSRtables' {
     procSampleName = meta.sampleName + "_" + meta.sampleType
 
     """
-    mkdir -p ${tmpDir}
-
     gatk GatherBQSRReports \\
         -I ${bqsr_table.join(" -I ")} \\
         -O ${procSampleName}_bqsr.table
@@ -1427,10 +1498,14 @@ process 'gatherGATK4scsatteredBQSRtables' {
 
 // ApplyBQSR (GATK4): apply BQSR table to reads
 process 'scatterGATK4applyBQSRS' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName : $meta.sampleType"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
+
+    publishDir "$params.outputDir/analyses/${meta.sampleName}/03_apply_bqsrs/",
+        mode: publishDirMode
 
     input:
     tuple(
@@ -1482,11 +1557,18 @@ process 'scatterGATK4applyBQSRS' {
     def procSampleName = meta.sampleName + "_" + meta.sampleType
     bam_out = [ procSampleName + "_" + intervals + "_recal4.bam",
                 procSampleName + "_" + intervals + "_recal4.bai"]
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
+    // --java-options "-Xmx${avail_mem}M" \\
+
     """
-    mkdir -p ${tmpDir}
     gatk ApplyBQSR \\
-        --java-options ${params.JAVA_Xmx} \\
-        --tmp-dir ${tmpDir} \\
+        --java-options "-Xmx${avail_mem}M" \\
+        --tmp-dir . \\
         -I ${bam[0]} \\
         -R ${RefFasta} \\
         -L ${intervals} \\
@@ -1496,10 +1578,11 @@ process 'scatterGATK4applyBQSRS' {
 }
 
 process 'GatherRecalBamFiles' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName : $meta.sampleType"
+    debug true
+
+    label 'process_high'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/03_baserecalibration/",
         mode: publishDirMode
@@ -1527,21 +1610,24 @@ process 'GatherRecalBamFiles' {
 
     script:
     procSampleName = meta.sampleName + "_" + meta.sampleType
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
+    // --java-options "-Xmx${avail_mem}M" \\
     """
-    mkdir -p ${tmpDir}
-
     rm -f ${procSampleName}_gather.fifo
     mkfifo ${procSampleName}_gather.fifo
-    gatk --java-options ${java_opts} GatherBamFiles \\
-        --TMP_DIR ${tmpDir} \\
+    gatk --java-options  "-Xmx${avail_mem}M" GatherBamFiles \\
+        --TMP_DIR . \\
         -I ${bam.join(" -I ")} \\
         -O ${procSampleName}_gather.fifo \\
         --CREATE_INDEX false \\
         --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} &
     samtools sort \\
         -@${task.cpus} \\
-        -m ${params.STperThreadMem} \\
         -o ${procSampleName}_recalibrated.bam ${procSampleName}_gather.fifo
     samtools index -@${task.cpus} ${procSampleName}_recalibrated.bam
     rm -f ${procSampleName}_gather.fifo
@@ -1551,10 +1637,11 @@ process 'GatherRecalBamFiles' {
 
 // GetPileupSummaries (GATK4): tabulates pileup metrics for inferring contamination
 process 'GetPileup' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName : $meta.sampleType"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/mutect2/processing/",
         mode: publishDirMode,
@@ -1584,10 +1671,8 @@ process 'GetPileup' {
     script:
     procSampleName = meta.sampleName + "_" + meta.sampleType
     """
-    mkdir -p ${tmpDir}
-
     gatk GetPileupSummaries \\
-        --tmp-dir ${tmpDir} \\
+        --tmp-dir . \\
         -I ${bam[0]} \\
         -O ${procSampleName}_pileup.table \\
         -L ${IntervalsList} \\
@@ -1623,33 +1708,39 @@ BaseRecalGATK4_out.branch {
 BaseRecalGATK4_out = BaseRecalGATK4_out.tumor.join(BaseRecalGATK4_out.normal, by: [0])
 
 
+igs_chck_ch = Channel.value("OK")
+install_conda_GATK3_ch0 = Channel.empty()
+install_conda_GATK3_ch1 = Channel.empty()
+
 // Install GATK 3 from conda and register jar
-if (have_GATK3) {
-    process install_conda_GATK3 {
-        label 'GATK3'
-
-        tag "install GATK3"
-
-        output:
-        path("gatk3_install.ok") into (
-            install_conda_GATK3_ch0,
-            install_conda_GATK3_ch1
-        )
-
-        script:
-        if (params.enable_conda)
-            """
-            curl -L -o gatk-3.8.tar.bz2 ${params.gatk3_conda_url} && \\
-            tar -xjf gatk-3.8.tar.bz2 opt/gatk-3.8/GenomeAnalysisTK.jar && \\
-            gatk-register opt/gatk-3.8/GenomeAnalysisTK.jar && \\
-            touch gatk3_install.ok
-            """
-        else
-            """
-            touch gatk3_install.ok
-            """
-    }
-}
+// if (have_GATK3) {
+//     process install_conda_GATK3 {
+//         tag "install GATK3"
+//
+//         label 'process_medium'
+// //         conda (params.enable_conda ? nextneopi_conda : null)
+//         container "${params.nextneopi_container}"
+//
+//         output:
+//         path("gatk3_install.ok") into (
+//             install_conda_GATK3_ch0,
+//             install_conda_GATK3_ch1
+//         )
+//
+//         script:
+//         if (params.enable_conda)
+//             """
+//             curl -L -o gatk-3.8.tar.bz2 ${params.gatk3_conda_url} && \\
+//             tar -xjf gatk-3.8.tar.bz2 opt/gatk-3.8/GenomeAnalysisTK.jar && \\
+//             gatk-register opt/gatk-3.8/GenomeAnalysisTK.jar && \\
+//             touch gatk3_install.ok
+//             """
+//         else
+//             """
+//             touch gatk3_install.ok
+//             """
+//     }
+// }
 
 if (have_GATK3) {
     (
@@ -1676,10 +1767,11 @@ if (have_GATK3) {
     and matched normal sample
 */
 process 'Mutect2' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName"
+    debug true
+
+    label 'process_high'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/mutect2/processing/",
         mode: publishDirMode,
@@ -1728,12 +1820,10 @@ process 'Mutect2' {
     def panel_of_normals = (pon.name != 'NO_FILE') ? "--panel-of-normals $pon" : ""
     def mk_pon_idx = (pon.name != 'NO_FILE') ? "tabix -f $pon" : ""
     """
-    mkdir -p ${tmpDir}
-
     ${mk_pon_idx}
 
     gatk Mutect2 \\
-        --tmp-dir ${tmpDir} \\
+        --tmp-dir . \\
         -R ${RefFasta} \\
         -I ${Tumorbam[0]} -tumor ${tumorName} \\
         -I ${Normalbam[0]} -normal ${normalName} \\
@@ -1748,10 +1838,11 @@ process 'Mutect2' {
 
 // Merge scattered Mutect2 vcfs
 process 'gatherMutect2VCFs' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/mutect2/",
         mode: publishDirMode,
@@ -1787,22 +1878,26 @@ process 'gatherMutect2VCFs' {
     ) into gatherMutect2VCFs_out_ch0
 
     script:
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
+    // --java-options "-Xmx${avail_mem}M" \\
     """
-    mkdir -p ${tmpDir}
-
-    gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M" MergeVcfs \\
+        --TMP_DIR . \\
         -I ${vcf.join(" -I ")} \\
         -O ${meta.sampleName}_mutect2_raw.vcf.gz
 
     gatk MergeMutectStats \\
-        --tmp-dir ${tmpDir} \\
+        --tmp-dir . \\
         --stats ${stats.join(" --stats ")} \\
         -O ${meta.sampleName}_mutect2_raw.vcf.gz.stats
 
     gatk LearnReadOrientationModel \\
-        --tmp-dir ${tmpDir} \\
+        --tmp-dir . \\
         -I ${f1r2_tar_gz.join(" -I ")} \\
         -O ${meta.sampleName}_read-orientation-model.tar.gz
     """
@@ -1831,10 +1926,11 @@ SelectVariants (GATK4): select subset of variants from a larger callset
 VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations
 */
 process 'FilterMutect2' {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/mutect2/",
         mode: publishDirMode
@@ -1872,22 +1968,20 @@ process 'FilterMutect2' {
 
     script:
     """
-    mkdir -p ${tmpDir}
-
     gatk CalculateContamination \\
-        --tmp-dir ${tmpDir} \\
+        --tmp-dir . \\
         -I ${pileupTumor} \\
         --matched-normal ${pileupNormal} \\
         -O ${meta.sampleName}_cont.table && \\
     gatk FilterMutectCalls \\
-        --tmp-dir ${tmpDir} \\
+        --tmp-dir . \\
         -R ${RefFasta} \\
         -V ${vcf[0]} \\
         --contamination-table ${meta.sampleName}_cont.table \\
         --ob-priors ${f1r2_tar_gz} \\
         -O ${meta.sampleName}_oncefiltered.vcf.gz && \\
     gatk SelectVariants \\
-        --tmp-dir ${tmpDir} \\
+        --tmp-dir . \\
         --variant ${meta.sampleName}_oncefiltered.vcf.gz \\
         -R ${RefFasta} \\
         --exclude-filtered true \\
@@ -1903,10 +1997,11 @@ process 'FilterMutect2' {
     germline variants are needed for generating phased vcfs for pVACtools
 */
 process 'HaploTypeCaller' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/haplotypecaller/processing/",
         mode: publishDirMode,
@@ -1947,11 +2042,16 @@ process 'HaploTypeCaller' {
 
 
     script:
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[GATK4 HaploTypeCaller] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
+    // --java-options "-Xmx${avail_mem}M" \\
     """
-    mkdir -p ${tmpDir}
-
-    gatk --java-options ${params.JAVA_Xmx} HaplotypeCaller \\
-        --tmp-dir ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M" HaplotypeCaller \\
+        --tmp-dir . \\
         -R ${RefFasta} \\
         -I ${Normalbam[0]} \\
         -L ${intervals} \\
@@ -1967,10 +2067,11 @@ process 'HaploTypeCaller' {
     germline variants are needed for generating phased vcfs for pVACtools
 */
 process 'CNNScoreVariants' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/haplotypecaller/processing/",
         mode: publishDirMode,
@@ -2003,10 +2104,8 @@ process 'CNNScoreVariants' {
 
     script:
     """
-    mkdir -p ${tmpDir}
-
     gatk CNNScoreVariants \\
-        --tmp-dir ${tmpDir} \\
+        --tmp-dir . \\
         -R ${RefFasta} \\
         -I ${Normalbam[0]} \\
         -V ${raw_germline_vcf[0]} \\
@@ -2022,10 +2121,11 @@ process 'CNNScoreVariants' {
 
 // Merge scattered filtered germline vcfs
 process 'MergeHaploTypeCallerGermlineVCF' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/haplotypecaller/raw/",
         mode: publishDirMode
@@ -2045,12 +2145,16 @@ process 'MergeHaploTypeCallerGermlineVCF' {
     ) into MergeHaploTypeCallerGermlineVCF_out_ch0
 
     script:
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
+    // --java-options "-Xmx${avail_mem}M" \\
     """
-    mkdir -p ${tmpDir}
-
-    gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M" MergeVcfs \\
+        --TMP_DIR . \\
         -I ${filtered_germline_vcf.join(" -I ")} \\
         -O ${meta.sampleName}_germline_CNNscored.vcf.gz
     """
@@ -2061,10 +2165,11 @@ process 'MergeHaploTypeCallerGermlineVCF' {
     germline variants are needed for generating phased vcfs for pVACtools
 */
 process 'FilterGermlineVariantTranches' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/haplotypecaller/",
         mode: publishDirMode
@@ -2100,10 +2205,8 @@ process 'FilterGermlineVariantTranches' {
 
     script:
     """
-    mkdir -p ${tmpDir}
-
     gatk FilterVariantTranches \\
-        --tmp-dir ${tmpDir} \\
+        --tmp-dir . \\
         -V ${scored_germline_vcf[0]} \\
         --resource ${hcSNPS1000G} \\
         --resource ${HapMap} \\
@@ -2126,10 +2229,16 @@ process 'FilterGermlineVariantTranches' {
 */
 if (have_GATK3) {
     process 'IndelRealignerIntervals' {
-
-        label 'GATK3'
-
         tag "$meta.sampleName : $meta.sampleType"
+        debug true
+
+        label 'process_high'
+
+        container "${params.gatk3_container}"
+//         conda "bioconda::gatk=3.5"
+//         container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+//             'https://depot.galaxyproject.org/singularity/gatk:3.5--hdfd78af_11':
+//             'quay.io/biocontainers/gatk:3.5--hdfd78af_11' }"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/03_realignment/processing/",
             mode: publishDirMode,
@@ -2162,7 +2271,7 @@ if (have_GATK3) {
             database.MillsGold,
             database.MillsGoldIdx ]
         )
-        path(gatk3_install_ok) from install_conda_GATK3_ch0
+//         path(gatk3_install_ok) from install_conda_GATK3_ch0
 
         each path(interval) from SplitIntervals_out_ch3.flatten()
 
@@ -2177,10 +2286,19 @@ if (have_GATK3) {
         bam_out = [ procSampleName + "_recalibrated_realign_" + interval + ".bam",
                     procSampleName + "_recalibrated_realign_" + interval + ".bai"]
 
+        def avail_mem = 60072
+        if (!task.memory) {
+            log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+        } else {
+            avail_mem = (task.memory.mega*0.8).intValue()
+        }
+        // --java-options "-Xmx${avail_mem}M" \\
         """
-        mkdir -p ${tmpDir}
-
-        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${tmpDir} -jar $GATK3 \\
+        #curl -L -o gatk-3.8.tar.bz2 ${params.gatk3_conda_url} && \\
+        #tar -xjf gatk-3.8.tar.bz2 opt/gatk-3.8/GenomeAnalysisTK.jar && \\
+        #gatk-register opt/gatk-3.8/GenomeAnalysisTK.jar && \\
+        gatk3 \\
+            -Xmx${avail_mem}M \\
             -T RealignerTargetCreator \\
             --known ${MillsGold} \\
             --known ${KnownIndels} \\
@@ -2189,7 +2307,8 @@ if (have_GATK3) {
             -I ${bam[0]} \\
             -o ${interval}_target.list \\
             -nt ${task.cpus} && \\
-        $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${tmpDir} -jar $GATK3 \\
+        gatk3 \\
+            -Xmx${avail_mem}M \\
             -T IndelRealigner \\
             -R ${RefFasta} \\
             -L ${interval} \\
@@ -2203,10 +2322,12 @@ if (have_GATK3) {
     }
 
     process 'GatherRealignedBamFiles' {
-
-        label 'nextNEOpiENV'
-
         tag "$meta.sampleName : $meta.sampleType"
+        debug true
+
+        label 'process_high'
+        container "${params.nextneopi_container}"
+
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/03_realignment/",
             mode: publishDirMode
@@ -2230,22 +2351,26 @@ if (have_GATK3) {
 
         script:
         procSampleName = meta.sampleName + "_" + meta.sampleType
-        def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+        def avail_mem = 60072
+        if (!task.memory) {
+            log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+        } else {
+            avail_mem = (task.memory.mega*0.8).intValue()
+        }
+        // --java-options "-Xmx${avail_mem}M" \\
         """
-        mkdir -p ${tmpDir}
-
         rm -f ${procSampleName}_gather.fifo
         mkfifo ${procSampleName}_gather.fifo
-        gatk --java-options ${java_opts} GatherBamFiles \\
-            --TMP_DIR ${tmpDir} \\
+        gatk3 --java-options "-Xmx${avail_mem}M" GatherBamFiles \\
+            --TMP_DIR . \\
             -I ${bam.join(" -I ")} \\
             -O ${procSampleName}_gather.fifo \\
             --CREATE_INDEX false \\
             --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} &
         samtools sort \\
             -@${task.cpus} \\
-            -m ${params.STperThreadMem} \\
-            -o ${procSampleName}_recalibrated_realign.bam ${procSampleName}_gather.fifo
+            -o ${procSampleName}_recalibrated_realign.bam \\
+            ${procSampleName}_gather.fifo
         samtools index -@${task.cpus}  ${procSampleName}_recalibrated_realign.bam
         rm -f ${procSampleName}_gather.fifo
         """
@@ -2305,10 +2430,11 @@ if (have_GATK3) {
 } // END if have GATK3
 
 process 'VarscanSomaticScattered' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/varscan/processing/",
         mode: publishDirMode,
@@ -2345,6 +2471,13 @@ process 'VarscanSomaticScattered' {
     script:
     // awk filters at the end needed, found at least one occurence of "W" in Ref field of
     // varscan vcf (? wtf). Non ACGT seems to cause MergeVCF (picard) crashing
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
+    // --java-options "-Xmx${avail_mem}M" \\
     """
     rm -f ${meta.sampleName}_${intervals}_mpileup.fifo
     mkfifo ${meta.sampleName}_${intervals}_mpileup.fifo
@@ -2353,7 +2486,7 @@ process 'VarscanSomaticScattered' {
         -f ${RefFasta} \\
         -l ${intervals} \\
         ${Normalbam[0]} ${Tumorbam[0]} > ${meta.sampleName}_${intervals}_mpileup.fifo &
-    varscan ${params.JAVA_Xmx} somatic \\
+    varscan "-Xmx${avail_mem}M" somatic \\
         ${meta.sampleName}_${intervals}_mpileup.fifo \\
         ${meta.sampleName}_${intervals}_varscan_tmp \\
         --output-vcf 1 \\
@@ -2380,10 +2513,11 @@ process 'VarscanSomaticScattered' {
 
 // Merge scattered Varscan vcfs
 process 'gatherVarscanVCFs' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName"
+    debug true
+
+    label 'process_high'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/varscan/processing/",
         mode: publishDirMode,
@@ -2419,18 +2553,22 @@ process 'gatherVarscanVCFs' {
     ) into gatherVarscanVCFs_out_ch0
 
     script:
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
+    // --java-options "-Xmx${avail_mem}M" \\
     """
-    mkdir -p ${tmpDir}
-
-    gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M" MergeVcfs \\
+        --TMP_DIR . \\
         -I ${snp_vcf.join(" -I ")} \\
         -O ${meta.sampleName}_varscan.snp.vcf \\
         --SEQUENCE_DICTIONARY ${RefDict}
 
-    gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M" MergeVcfs \\
+        --TMP_DIR . \\
         -I ${indel_vcf.join(" -I ")} \\
         -O ${meta.sampleName}_varscan.indel.vcf \\
         --SEQUENCE_DICTIONARY ${RefDict}
@@ -2440,10 +2578,11 @@ process 'gatherVarscanVCFs' {
 
 // Filter variants by somatic status and confidences
 process 'ProcessVarscan' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/varscan/raw/",
         mode: publishDirMode
@@ -2477,13 +2616,20 @@ process 'ProcessVarscan' {
     ) into ProcessVarscanIndel_out_ch0
 
     script:
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
+    // --java-options "-Xmx${avail_mem}M" \\
     """
-    varscan ${params.JAVA_Xmx} processSomatic \\
+    varscan "-Xmx${avail_mem}M" processSomatic \\
         ${snp} \\
         --min-tumor-freq ${params.min_tumor_freq} \\
         --max-normal-freq ${params.max_normal_freq} \\
         --p-value ${params.processSomatic_pvalue} && \\
-    varscan ${params.JAVA_Xmx} processSomatic \\
+    varscan "-Xmx${avail_mem}M" processSomatic \\
         ${indel} \\
         --min-tumor-freq ${params.min_tumor_freq} \\
         --max-normal-freq ${params.max_normal_freq} \\
@@ -2497,10 +2643,11 @@ process 'ProcessVarscan' {
     fpfilter (Varscan): apply false-positive filter to variants
 */
 process 'FilterVarscan' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName"
+    debug true
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/varscan/processing/",
         mode: publishDirMode,
@@ -2544,6 +2691,13 @@ process 'FilterVarscan' {
     ) into FilterVarscan_out_ch0
 
     script:
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
+    // --java-options "-Xmx${avail_mem}M" \\
     """
     cat ${snpSomaticHc} | \\
     awk '{if (!/^#/) { x = length(\$5) - 1; print \$1,\$2,(\$2+x); }}' | \\
@@ -2554,7 +2708,7 @@ process 'FilterVarscan' {
         -l /dev/stdin \\
         -f ${RefFasta} \\
         ${bam[0]} | \\
-    varscan ${params.JAVA_Xmx} fpfilter \\
+    varscan "-Xmx${avail_mem}M" fpfilter \\
         ${snpSomaticHc} \\
         /dev/stdin \\
         --output-file ${meta.sampleName}_varscan.snp.Somatic.hc.filtered.vcf && \\
@@ -2566,7 +2720,7 @@ process 'FilterVarscan' {
         -w1 \\
         -l /dev/stdin \\
         -f ${RefFasta} ${bam[0]} | \\
-    varscan ${params.JAVA_Xmx} fpfilter \\
+    varscan "-Xmx${avail_mem}M" fpfilter \\
         ${indelSomaticHc} \\
         /dev/stdin \\
         --output-file ${meta.sampleName}_varscan.indel.Somatic.hc.filtered.vcf
@@ -2579,10 +2733,10 @@ process 'FilterVarscan' {
     2. Rename the sample names (TUMOR/NORMAL) from varscan vcfs to the real samplenames
 */
 process 'MergeAndRenameSamplesInVarscanVCF' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/varscan/",
         mode: publishDirMode
@@ -2607,24 +2761,29 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
     )
 
     script:
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
+    // --java-options "-Xmx${avail_mem}M" \\
     """
-    mkdir -p ${tmpDir}
 
     bgzip -c ${VarScanSNP_VCF} > ${VarScanSNP_VCF}.gz
     tabix -p vcf ${VarScanSNP_VCF}.gz
     bgzip -c ${VarScanINDEL_VCF} > ${VarScanINDEL_VCF}.gz
     tabix -p vcf ${VarScanINDEL_VCF}.gz
 
-    gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M" MergeVcfs \\
+        --TMP_DIR . \\
         -I ${VarScanSNP_VCF}.gz \\
         -I ${VarScanINDEL_VCF}.gz \\
         -O ${meta.sampleName}_varscan_combined.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
 
-    gatk --java-options ${java_opts} SortVcf \\
-        --TMP_DIR ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M" SortVcf \\
+        --TMP_DIR . \\
         -I ${meta.sampleName}_varscan_combined.vcf.gz \\
         -O ${meta.sampleName}_varscan_combined_sorted.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
@@ -2647,8 +2806,11 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
 if(have_Mutect1) {
     // Mutect1: calls SNPS from tumor and matched normal sample
     process 'Mutect1scattered' {
-
         tag "$meta.sampleName"
+
+        label 'process_high'
+
+        container "${params.mutect1_container}"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/mutect1/processing/",
             mode: publishDirMode,
@@ -2696,10 +2858,19 @@ if(have_Mutect1) {
                        file(params.databases.CosmicIdx).exists()
                      ) ? "--cosmic " + file(params.databases.Cosmic)
                        : ""
+        def avail_mem = 60072
+        if (!task.memory) {
+            log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+        } else {
+            avail_mem = (task.memory.mega*0.8).intValue()
+        }
+        // --java-options "-Xmx${avail_mem}M" \\
+//             -jar $MUTECT1 \\
         """
-        mkdir -p ${tmpDir}
 
-        $JAVA7 ${params.JAVA_Xmx} -Djava.io.tmpdir=${tmpDir} -jar $MUTECT1 \\
+        java "-Xmx${avail_mem}M"  \\
+            -Djava.io.tmpdir=./ \\
+            -jar "/usr/bin/mutect-1.1.7.jar" \\
             --analysis_type MuTect \\
             --reference_sequence ${RefFasta} \\
             ${cosmic} \\
@@ -2715,7 +2886,8 @@ if(have_Mutect1) {
     // Merge scattered Mutect1 vcfs
     process 'gatherMutect1VCFs' {
 
-        label 'nextNEOpiENV'
+        label 'process_medium'
+        container "${params.nextneopi_container}"
 
         tag "$meta.sampleName"
 
@@ -2769,17 +2941,21 @@ if(have_Mutect1) {
 
 
         script:
-        def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+        def avail_mem = 60072
+        if (!task.memory) {
+            log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+        } else {
+            avail_mem = (task.memory.mega*0.8).intValue()
+        }
+        // --java-options "-Xmx${avail_mem}M" \\
         """
-        mkdir -p ${tmpDir}
-
-        gatk --java-options ${java_opts} MergeVcfs \\
-            --TMP_DIR ${tmpDir} \\
+        gatk --java-options "-Xmx${avail_mem}M" MergeVcfs \\
+            --TMP_DIR . \\
             -I ${vcf[0].join(" -I ")} \\
             -O ${meta.sampleName}_mutect1_raw.vcf.gz
 
         gatk SelectVariants \\
-            --tmp-dir ${tmpDir} \\
+            --tmp-dir . \\
             --variant ${meta.sampleName}_mutect1_raw.vcf.gz \\
             -R ${RefFasta} \\
             --exclude-filtered true \\
@@ -2811,10 +2987,15 @@ MantaSomaticIndels_out_ch0 = Channel.create()
 MantaSomaticIndels_out_NeoFuse_in_ch0 = Channel.create()
 
 process 'MantaSomaticIndels' {
-
-    label 'Manta'
-
     tag "$meta.sampleName"
+
+    label 'process_high'
+
+    container "${params.manta_container}"
+//     conda "bioconda::manta=1.6.0"
+//     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+//         'https://depot.galaxyproject.org/singularity/manta:1.6.0--h9ee0642_1' :
+//         'quay.io/biocontainers/manta:1.6.0--h9ee0642_1' }"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/manta/",
         saveAs: {
@@ -2913,10 +3094,15 @@ StrelkaSomatic_in_ch = BaseRecalGATK4_out_StrelkaSomatic_ch0
                         }
 
 process StrelkaSomatic {
-
-    label 'Strelka'
-
     tag "$meta.sampleName"
+
+    label 'process_high'
+
+    container "${params.strelka_container}"
+//     conda "bioconda::strelka=2.9.10"
+//     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+//         'https://depot.galaxyproject.org/singularity/strelka:2.9.10--h9ee0642_1' :
+//         'quay.io/biocontainers/strelka:2.9.10--h9ee0642_1' }"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/strelka/",
         saveAs: { filename -> filename.indexOf("_runStats") > 0 ? "stats/$filename" : "raw/$filename"},
@@ -2975,9 +3161,10 @@ process StrelkaSomatic {
 }
 
 process 'finalizeStrelkaVCF' {
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/strelka/",
         saveAs: { filename -> filename.indexOf("_strelka_combined_somatic.vcf.gz") > 0 ? "raw/$filename" : "$filename"},
@@ -3013,18 +3200,24 @@ process 'finalizeStrelkaVCF' {
     path("${meta.sampleName}_strelka_combined_somatic.vcf.gz")
 
     script:
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
+    // --java-options "-Xmx${avail_mem}M" \\
     """
 
-    gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M" MergeVcfs \\
+        --TMP_DIR . \\
         -I ${somatic_snvs[0]} \\
         -I ${somatic_indels[0]} \\
         -O ${meta.sampleName}_strelka_combined.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
 
-    gatk --java-options ${java_opts} SortVcf \\
-        --TMP_DIR ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M" SortVcf \\
+        --TMP_DIR . \\
         -I ${meta.sampleName}_strelka_combined.vcf.gz \\
         -O ${meta.sampleName}_strelka_combined_sorted.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
@@ -3041,7 +3234,7 @@ process 'finalizeStrelkaVCF' {
     rm -f vcf_rename_${meta.sampleName}_tmp
 
     gatk SelectVariants \\
-        --tmp-dir ${tmpDir} \\
+        --tmp-dir . \\
         --variant ${meta.sampleName}_strelka_combined_somatic.vcf.gz \\
         -R ${RefFasta} \\
         --exclude-filtered true \\
@@ -3057,10 +3250,11 @@ process 'finalizeStrelkaVCF' {
     that are confirmed by any of the confirming callers (e..g. mutect1, varscan)
 */
 process 'mkHCsomaticVCF' {
-
-    label 'nextNEOpiENV'
-
     tag "$meta.sampleName"
+
+    label 'process_high'
+    container "${params.nextneopi_container}"
+
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/high_confidence/",
         mode: publishDirMode
@@ -3134,111 +3328,116 @@ process 'mkHCsomaticVCF' {
 
 vep_cache_chck_file_name = "." + params.vep_species + "_" + params.vep_assembly + "_" + params.vep_cache_version + "_cache_ok.chck"
 vep_cache_chck_file = file(params.databases.vep_cache + "/" + vep_cache_chck_file_name)
-if(!vep_cache_chck_file.exists() || vep_cache_chck_file.isEmpty()) {
-
-    log.warn "WARNING: VEP cache not installed, starting installation. This may take a while."
-
-    process 'installVEPcache' {
-
-        label 'VEP'
-
-        tag 'installVEPcache'
-
-        // do not cache
-        cache false
-
-        output:
-        path("${vep_cache_chck_file_name}") into (
-            vep_cache_ch0,
-            vep_cache_ch1,
-            vep_cache_ch2
-        )
-
-        script:
-        if(!have_vep)
-            """
-            mkdir -p ${params.databases.vep_cache}
-            vep_install \\
-                -a cf \\
-                -s ${params.vep_species} \\
-                -y ${params.vep_assembly} \\
-                -c ${params.databases.vep_cache} \\
-                --CACHE_VERSION ${params.vep_cache_version} \\
-                --CONVERT 2> vep_errors.txt && \\
-            echo "OK" > ${vep_cache_chck_file_name} && \\
-            cp -f  ${vep_cache_chck_file_name} ${vep_cache_chck_file}
-            """
-        else
-            """
-            echo "OK" > ${vep_cache_chck_file_name} && \\
-            cp -f  ${vep_cache_chck_file_name} ${vep_cache_chck_file}
-            """
-    }
-
-} else {
-
+// if(!vep_cache_chck_file.exists() || vep_cache_chck_file.isEmpty()) {
+//
+//     log.warn "WARNING: VEP cache not installed, starting installation. This may take a while."
+//
+//     process 'installVEPcache' {
+//         tag 'installVEPcache'
+//
+//         label 'VEP'
+//
+// //         conda (params.enable_conda ? nextneopi_conda : null)
+//         container "${params.nextneopi_container}"
+//
+//         // do not cache
+//         cache false
+//
+//         output:
+//         path("${vep_cache_chck_file_name}") into (
+//             vep_cache_ch0,
+//             vep_cache_ch1,
+//             vep_cache_ch2
+//         )
+//
+//         script:
+//         if(!have_vep)
+//             """
+//             mkdir -p ${params.databases.vep_cache}
+//             vep_install \\
+//                 -a cf \\
+//                 -s ${params.vep_species} \\
+//                 -y ${params.vep_assembly} \\
+//                 -c ${params.databases.vep_cache} \\
+//                 --CACHE_VERSION ${params.vep_cache_version} \\
+//                 --CONVERT 2> vep_errors.txt && \\
+//             echo "OK" > ${vep_cache_chck_file_name} && \\
+//             cp -f  ${vep_cache_chck_file_name} ${vep_cache_chck_file}
+//             """
+//         else
+//             """
+//             echo "OK" > ${vep_cache_chck_file_name} && \\
+//             cp -f  ${vep_cache_chck_file_name} ${vep_cache_chck_file}
+//             """
+//     }
+//
+// } else {
+//
     vep_cache_ch = Channel.fromPath(vep_cache_chck_file)
     (vep_cache_ch0, vep_cache_ch1, vep_cache_ch2) = vep_cache_ch.into(3)
-
-}
+//
+// }
 
 vep_plugins_chck_file_name = "." + params.vep_cache_version + "_plugins_ok.chck"
 vep_plugins_chck_file = file(params.databases.vep_cache + "/" + vep_plugins_chck_file_name)
-if(!vep_plugins_chck_file.exists() || vep_plugins_chck_file.isEmpty()) {
-
-    log.warn "WARNING: VEP plugins not installed, starting installation. This may take a while."
-
-    process 'installVEPplugins' {
-
-        label 'VEP'
-
-        tag 'installVEPplugins'
-
-        // do not cache
-        cache false
-
-        input:
-        path(vep_cache_chck_file) from vep_cache_ch2
-
-        output:
-        path("${vep_plugins_chck_file_name}") into (
-            vep_plugins_ch0,
-            vep_plugins_ch1
-        )
-
-        script:
-        if(!have_vep)
-            """
-            mkdir -p ${params.databases.vep_cache}
-            vep_install \\
-                -a p \\
-                -c ${params.databases.vep_cache} \\
-                --PLUGINS all 2> vep_errors.txt && \\
-            cp -f ${baseDir}/assets/Wildtype.pm ${params.databases.vep_cache}/Plugins && \\
-            cp -f ${baseDir}/assets/Frameshift.pm ${params.databases.vep_cache}/Plugins && \\
-            echo "OK" > ${vep_plugins_chck_file_name} && \\
-            cp -f  ${vep_plugins_chck_file_name} ${vep_plugins_chck_file}
-            """
-        else
-            """
-            echo "OK" > ${vep_plugins_chck_file_name} && \\
-            cp -f  ${vep_plugins_chck_file_name} ${vep_plugins_chck_file}
-            """
-    }
-
-} else {
-
+// we already have the databases - do not run things locally
+// if(!vep_plugins_chck_file.exists() || vep_plugins_chck_file.isEmpty()) {
+//
+//     log.warn "WARNING: VEP plugins not installed, starting installation. This may take a while."
+//
+//     process 'installVEPplugins' {
+//         tag 'installVEPplugins'
+//
+//         label 'VEP'
+//
+// //         conda (params.enable_conda ? nextneopi_conda : null)
+//         container "${params.nextneopi_container}"
+//
+//         // do not cache
+//         cache false
+//
+//         input:
+//         path(vep_cache_chck_file) from vep_cache_ch2
+//
+//         output:
+//         path("${vep_plugins_chck_file_name}") into (
+//             vep_plugins_ch0,
+//             vep_plugins_ch1
+//         )
+//
+//         script:
+//         if(!have_vep)
+//             """
+//             mkdir -p ${params.databases.vep_cache}
+//             vep_install \\
+//                 -a p \\
+//                 -c ${params.databases.vep_cache} \\
+//                 --PLUGINS all 2> vep_errors.txt && \\
+//             cp -f ${baseDir}/assets/Wildtype.pm ${params.databases.vep_cache}/Plugins && \\
+//             cp -f ${baseDir}/assets/Frameshift.pm ${params.databases.vep_cache}/Plugins && \\
+//             echo "OK" > ${vep_plugins_chck_file_name} && \\
+//             cp -f  ${vep_plugins_chck_file_name} ${vep_plugins_chck_file}
+//             """
+//         else
+//             """
+//             echo "OK" > ${vep_plugins_chck_file_name} && \\
+//             cp -f  ${vep_plugins_chck_file_name} ${vep_plugins_chck_file}
+//             """
+//     }
+//
+// } else {
+//
     vep_plugins_ch = Channel.fromPath(vep_plugins_chck_file)
     (vep_plugins_ch0, vep_plugins_ch1) = vep_plugins_ch.into(2)
-
-}
+//
+// }
 
 // Variant Effect Prediction: using ensembl vep
 process 'VepTab' {
-
-    label 'VEP'
-
     tag "$meta.sampleName"
+
+    label 'process_high'
+    container  "${params.vep_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/05_vep/tables/",
         saveAs: {
@@ -3272,6 +3471,8 @@ process 'VepTab' {
     path("${meta.sampleName}_${CallerName}_vep_summary.html")
 
     script:
+    // vep_cache/homo_sapiens/107_GRCh38/Homo_sapiens.GRCh38.dna.toplevel.fa.gz
+    // vep_cache/homo_sapiens/107_GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
     """
     vep -i ${Vcf[0]} \\
         -o ${meta.sampleName}_${CallerName}_vep.txt \\
@@ -3287,7 +3488,7 @@ process 'VepTab' {
         --fasta ${params.references.VepFasta} \\
         --format "vcf" \\
         ${params.vep_options} \\
-        --tab 2> vep_errors.txt
+        --tab
     """
 }
 
@@ -3300,7 +3501,8 @@ process 'VepTab' {
 // combined germline and somatic variants
 process 'mkCombinedVCF' {
 
-    label 'nextNEOpiENV'
+    label 'process_high'
+    container "${params.nextneopi_container}"
 
     tag "${meta.sampleName}"
 
@@ -3335,31 +3537,34 @@ process 'mkCombinedVCF' {
 
 
     script:
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def avail_mem = 60072
+    if (!task.memory) {
+        log.info '[AlignmentMetrics] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+    } else {
+        avail_mem = (task.memory.mega*0.8).intValue()
+    }
     """
-    mkdir -p ${tmpDir}
-
-    gatk --java-options ${params.JAVA_Xmx} SelectVariants \\
-        --tmp-dir ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M" SelectVariants \\
+        --tmp-dir . \\
         -R ${RefFasta} \\
         -V ${tumorVCF[0]} \\
         --sample-name ${meta.sampleName}_tumor \\
         -O ${meta.sampleName}_tumor.vcf.gz
 
-    gatk --java-options ${java_opts} RenameSampleInVcf \\
-        --TMP_DIR ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M"  RenameSampleInVcf \\
+        --TMP_DIR . \\
         -I ${germlineVCF[0]} \\
         --NEW_SAMPLE_NAME ${meta.sampleName}_tumor \\
         -O ${meta.sampleName}_germline_rename2tumorID.vcf.gz
 
-    gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M" MergeVcfs \\
+        --TMP_DIR . \\
         -I ${meta.sampleName}_tumor.vcf.gz \\
         -I ${meta.sampleName}_germline_rename2tumorID.vcf.gz \\
         -O ${meta.sampleName}_tumor_germline_combined.vcf.gz
 
-    gatk --java-options ${java_opts} SortVcf \\
-        --TMP_DIR ${tmpDir} \\
+    gatk --java-options "-Xmx${avail_mem}M" SortVcf \\
+        --TMP_DIR . \\
         -I ${meta.sampleName}_tumor_germline_combined.vcf.gz \\
         -O ${meta.sampleName}_tumor_germline_combined_sorted.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
@@ -3367,10 +3572,10 @@ process 'mkCombinedVCF' {
 }
 
 process 'VEPvcf' {
-
-    label 'VEP'
+    label 'process_high'
 
     tag "${meta.sampleName}"
+    container "${params.vep_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/05_vep/vcf/high_confidence/",
         saveAs: {
@@ -3434,8 +3639,6 @@ process 'VEPvcf' {
 
     script:
     """
-    mkdir -p ${tmpDir}
-
     # pVACSeq
     vep -i ${combinedVCF[0]} \\
         -o ${meta.sampleName}_tumor_germline_combined_sorted_vep_pick.vcf \\
@@ -3453,7 +3656,7 @@ process 'VEPvcf' {
         --pick --plugin Frameshift --plugin Wildtype \\
         --symbol --terms SO --transcript_version --tsl \\
         --format vcf \\
-        --vcf 2> vep_errors_0.txt
+        --vcf
 
     # pVACSeq
     vep -i ${tumorVCF[0]} \\
@@ -3471,7 +3674,7 @@ process 'VEPvcf' {
         --fasta ${params.references.VepFasta} \\
         --pick --plugin Frameshift --plugin Wildtype \\
         --symbol --terms SO --transcript_version --tsl \\
-        --vcf 2>> vep_errors_1.txt
+        --vcf
 
     # All variants
     vep -i ${tumorVCF[0]} \\
@@ -3489,7 +3692,7 @@ process 'VEPvcf' {
         --fasta ${params.references.VepFasta} \\
         --plugin ProteinSeqs,${meta.sampleName}_hc_reference.fa,${meta.sampleName}_hc_mutated.fa \\
         --symbol --terms SO --transcript_version --tsl \\
-        --vcf 2>> vep_errors_1.txt
+        --vcf
 
 
     bgzip -c ${meta.sampleName}_tumor_germline_combined_sorted_vep_pick.vcf \\
@@ -3516,10 +3719,11 @@ process 'VEPvcf' {
 
 if(have_GATK3) {
     process 'ReadBackedphasing' {
-
-        label 'GATK3'
-
         tag "${meta.sampleName}"
+
+        label 'process_high'
+
+        container "${params.gatk3_container}"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/high_confidence_readbacked_phased/",
             mode: publishDirMode
@@ -3541,7 +3745,7 @@ if(have_GATK3) {
             reference.RefIdx,
             reference.RefDict ]
         )
-        path(gatk3_install_ok) from install_conda_GATK3_ch1
+//         path(gatk3_install_ok) from install_conda_GATK3_ch1
 
         output:
         tuple(
@@ -3554,8 +3758,14 @@ if(have_GATK3) {
         )
 
         script:
+        def avail_mem = 60072
+        if (!task.memory) {
+            log.info '[ReadBackedPhasing] Available memory not known - defaulting to 60GB. Specify process memory requirements to change this.'
+        } else {
+            avail_mem = (task.memory.mega*0.8).intValue()
+        }
         """
-        $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${tmpDir} -jar $GATK3 \\
+        gatk3 \\
             -T ReadBackedPhasing \\
             -R ${RefFasta} \\
             -I ${tumorBAM[0]} \\
@@ -3581,10 +3791,14 @@ if(have_GATK3) {
 
 // adopted from sarek nfcore
 process AlleleCounter {
-
-    label 'AlleleCounter'
-
     tag "$meta.sampleName : $meta.sampleType"
+
+    label 'process_medium'
+
+    container "${params.allele_counter_container}"
+
+    publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/allele_counter/",
+        mode: publishDirMode
 
     input:
     tuple(
@@ -3643,10 +3857,10 @@ AlleleCounter_out_ch = AlleleCounter_out_ch0.tumor.join(AlleleCounter_out_ch0.no
 // R script from Malin Larssons bitbucket repo:
 // https://bitbucket.org/malinlarsson/somatic_wgs_pipeline
 process ConvertAlleleCounts {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/ASCAT/processing",
         mode: publishDirMode,
@@ -3680,10 +3894,10 @@ process ConvertAlleleCounts {
 // R scripts from Malin Larssons bitbucket repo:
 // https://bitbucket.org/malinlarsson/somatic_wgs_pipeline
 process 'Ascat' {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/ASCAT/",
         mode: publishDirMode
@@ -3721,10 +3935,10 @@ process 'Ascat' {
 
 if (params.controlFREEC) {
     process 'Mpileup4ControFREEC' {
-
-        label 'nextNEOpiENV'
-
         tag "$meta.sampleName - $meta.sampleType"
+
+        label 'process_medium'
+        container "${params.nextneopi_container}"
 
         input:
         tuple(
@@ -3768,10 +3982,13 @@ if (params.controlFREEC) {
 
     // Merge scattered pileups
     process 'gatherMpileups' {
-
-        label 'nextNEOpiENV'
-
         tag "${meta.sampleName} : ${meta.sampleType}"
+
+        label 'process_medium'
+        container "${params.nextneopi_container}"
+
+        publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/gather_mpileups/",
+            mode: publishDirMode
 
         input:
         tuple(
@@ -3810,10 +4027,10 @@ if (params.controlFREEC) {
 
     // run ControlFREEC : adopted from nfcore sarek
     process 'ControlFREEC' {
-
-        label 'Freec'
-
         tag "${meta.sampleName}"
+
+        label 'process_medium'
+        container "${params.nextneopi_container}"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/controlFREEC/",
             mode: publishDirMode
@@ -3906,9 +4123,12 @@ if (params.controlFREEC) {
     process 'ControlFREECviz' {
 
         tag "${meta.sampleName}"
+        label 'process_medium'
 
         // makeGraph.R and assess_significance.R seem to be instable
+        container "${params.nextneopi_container}"
         errorStrategy 'ignore'
+//     errorStrategy  { task.attempt <= maxRetries  ? 'retry' : 'finish' }
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/controlFREEC/",
             mode: publishDirMode
@@ -3948,10 +4168,13 @@ Channel
     .set { chromosomes_ch }
 
 process 'SequenzaUtils' {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
+
+    publishDir "$params.outputDir/analyses/${meta.sampleName}/08_sequenza_utils/",
+        mode: publishDirMode
 
     input:
     tuple(
@@ -4002,7 +4225,8 @@ process 'SequenzaUtils' {
 
 process gatherSequenzaInput {
 
-    label 'nextNEOpiENV'
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     tag "${meta.sampleName}"
 
@@ -4044,10 +4268,10 @@ process gatherSequenzaInput {
 }
 
 process Sequenza {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     errorStrategy "ignore"
 
@@ -4160,10 +4384,15 @@ purity_estimate.map{
 // CNVkit
 
 process make_CNVkit_access_file {
-
-    label 'CNVkit'
-
     tag 'mkCNVkitaccess'
+
+    label 'process_medium'
+    container "${params.cnvkit_container}"
+//     conda "bioconda::cnvkit=0.9.9 bioconda::samtools=1.16.1"
+//     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+//         'https://depot.galaxyproject.org/singularity/cnvkit:0.9.9--pyhdfd78af_0':
+//         'quay.io/biocontainers/cnvkit:0.9.9--pyhdfd78af_0' }"
+
 
     publishDir "$params.outputDir/supplemental/01_prepare_CNVkit/",
         mode: publishDirMode
@@ -4193,13 +4422,18 @@ process make_CNVkit_access_file {
 }
 
 process CNVkit {
-
-    label 'CNVkit'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/CNVkit/",
         mode: publishDirMode
+
+    container "${params.cnvkit_container}"
+//     conda "bioconda::cnvkit=0.9.9 bioconda::samtools=1.16.1"
+//     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+//         'https://depot.galaxyproject.org/singularity/cnvkit:0.9.9--pyhdfd78af_0':
+//         'quay.io/biocontainers/cnvkit:0.9.9--pyhdfd78af_0' }"
 
     input:
     tuple(
@@ -4381,10 +4615,11 @@ clonality_input = Ascat_out_Clonality_ch1.join(Sequenza_out_Clonality_ch1, by: [
 
 
 process 'Clonality' {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/09_CCF/",
         mode: publishDirMode
@@ -4455,15 +4690,15 @@ process 'Clonality' {
 
 // mutational burden all variants all covered positions
 process 'MutationalBurden' {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/07_MutationalBurden/",
         mode: publishDirMode
 
-    errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
+    errorStrategy  { task.attempt <= maxRetries  ? 'retry' : 'finish' }
     maxRetries 3
 
     cache 'lenient'
@@ -4510,15 +4745,16 @@ process 'MutationalBurden' {
 
 // mutational burden coding variants coding (exons) covered positions
 process 'MutationalBurdenCoding' {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/07_MutationalBurden/",
         mode: publishDirMode
 
-    errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
+//     errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
+    errorStrategy  { task.attempt <= maxRetries  ? 'retry' : 'finish' }
     maxRetries 3
 
     cache 'lenient'
@@ -4573,10 +4809,10 @@ process 'MutationalBurdenCoding' {
 // HLA TYPING
 
 process 'mhc_extract' {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/10_HLA_typing/mhc_extract",
         mode: publishDirMode,
@@ -4677,10 +4913,11 @@ process 'mhc_extract' {
 if (run_OptiType) {
 
     process 'pre_map_hla' {
-
-        label 'nextNEOpiENV'
-
         tag "${meta.sampleName}"
+
+        label 'process_medium'
+        container "${params.nextneopi_container}"
+
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/10_HLA_typing/Optitype/processing/",
             mode: publishDirMode,
@@ -4741,10 +4978,11 @@ if (run_OptiType) {
     */
 
     process 'OptiType' {
-
-        label 'nextNEOpiENV'
-
         tag "${meta.sampleName}"
+
+        label 'process_medium'
+        container "${params.nextneopi_container}"
+
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/10_HLA_typing/Optitype/",
             mode: publishDirMode
@@ -4774,10 +5012,10 @@ if (run_OptiType) {
 
     if (! have_RNA_tag_seq) {
         process 'pre_map_hla_RNA' {
-
-            label 'nextNEOpiENV'
-
             tag "${meta.sampleName}"
+
+            label 'process_medium'
+            container "${params.nextneopi_container}"
 
             publishDir "$params.outputDir/analyses/${meta.sampleName}/10_HLA_typing/Optitype/processing/",
                 mode: publishDirMode,
@@ -4831,10 +5069,10 @@ if (run_OptiType) {
         }
 
         process 'OptiType_RNA' {
-
-            label 'nextNEOpiENV'
-
             tag "${meta.sampleName}"
+
+            label 'process_medium'
+            container "${params.nextneopi_container}"
 
             publishDir "$params.outputDir/analyses/${meta.sampleName}/10_HLA_typing/Optitype/",
                 mode: publishDirMode
@@ -5048,10 +5286,11 @@ batch_custom_HLA_data_ch = batch_custom_HLA_data_ch.map{
 }
 
 process get_vhla {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
+
 
     publishDir "$params.outputDir/neoantigens/${meta.sampleName}/Final_HLAcalls/",
     mode: publishDirMode
@@ -5136,8 +5375,10 @@ MantaSomaticIndels_out_NeoFuse_in_ch0 = MantaSomaticIndels_out_NeoFuse_in_ch0.ma
 }
 
 process Neofuse {
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/",
         saveAs: {
@@ -5242,6 +5483,9 @@ process Neofuse {
 process publish_NeoFuse {
     tag "${meta.sampleName}"
 
+    label 'process_medium'
+    container "${params.nextneopi_container}"
+
     publishDir "$params.outputDir/neoantigens/${meta.sampleName}/",
     saveAs: {
         fileName ->
@@ -5282,10 +5526,10 @@ process publish_NeoFuse {
 Add the gene ID (required by vcf-expression-annotator) to the TPM file
 */
 process add_geneID {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     input:
     tuple(
@@ -5325,7 +5569,8 @@ process gene_annotator {
 
     tag "${meta.sampleName}"
 
-    label 'pVACtools'
+    label 'process_large'
+    container "${params.nextneopi_container}"
 
     input:
     tuple(
@@ -5406,61 +5651,66 @@ process gene_annotator {
 // IEDB installation
 iedb_chck_file_name = ".iedb_install_ok.chck"
 iedb_chck_file = file(params.databases.IEDB_dir + "/" + iedb_chck_file_name)
+iedb_install_out_ch = Channel.empty()
 
-if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
 
-    log.warn "WARNING: IEDB yet not installed, starting installation. This may take a while..."
-
-    process install_IEDB {
-
-        tag "Install IEDB"
-
-        publishDir "${params.databases.IEDB_dir}",
-            mode: "copy"
-
-        label 'pVACtools'
-
-        input:
-        val(iedb_MHCI_url) from Channel.value(params.IEDB_MHCI_url)
-        val(iedb_MHCII_url) from Channel.value(params.IEDB_MHCII_url)
-
-        output:
-        path("${iedb_chck_file_name}") into iedb_install_out_ch
-
-        script:
-        def mhci_file = iedb_MHCI_url.split("/")[-1]
-        def mhcii_file = iedb_MHCII_url.split("/")[-1]
-        """
-        CWD=`pwd`
-        cd /opt/iedb/
-        rm -f $mhci_file
-        wget $iedb_MHCI_url
-        tar -xzvf $mhci_file
-        cd mhc_i
-        bash -c "./configure"
-        cd /opt/iedb/
-        rm -f $mhci_file
-
-        rm -f $mhcii_file
-        wget $iedb_MHCII_url
-        tar -xzvf $mhcii_file
-        cd mhc_ii
-        bash -c "python ./configure.py"
-        cd /opt/iedb/
-        rm $mhcii_file
-
-        export MHCFLURRY_DATA_DIR=/opt/mhcflurry_data
-        mhcflurry-downloads fetch
-
-        cd \$CWD
-        echo "OK" > ${iedb_chck_file_name}
-        """
-    }
-} else {
-
-    iedb_install_out_ch = Channel.fromPath(iedb_chck_file)
-
-}
+// if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
+//
+//     log.warn "WARNING: IEDB yet not installed, starting installation. This may take a while..."
+//
+//     process install_IEDB {
+//
+//         tag "Install IEDB"
+//         label 'process_medium'
+// //         conda (params.enable_conda ? nextneopi_conda : null)
+//         container "${params.nextneopi_container}"
+//
+//         publishDir "${params.databases.IEDB_dir}",
+//             mode: "copy"
+//
+//         label 'pVACtools'
+//
+//         input:
+//         val(iedb_MHCI_url) from Channel.value(params.IEDB_MHCI_url)
+//         val(iedb_MHCII_url) from Channel.value(params.IEDB_MHCII_url)
+//
+//         output:
+//         path("${iedb_chck_file_name}") into iedb_install_out_ch
+//
+//         script:
+//         def mhci_file = iedb_MHCI_url.split("/")[-1]
+//         def mhcii_file = iedb_MHCII_url.split("/")[-1]
+//         """
+//         CWD=`pwd`
+//         cd /opt/iedb/
+//         rm -f $mhci_file
+//         wget $iedb_MHCI_url
+//         tar -xzvf $mhci_file
+//         cd mhc_i
+//         bash -c "./configure"
+//         cd /opt/iedb/
+//         rm -f $mhci_file
+//
+//         rm -f $mhcii_file
+//         wget $iedb_MHCII_url
+//         tar -xzvf $mhcii_file
+//         cd mhc_ii
+//         bash -c "python ./configure.py"
+//         cd /opt/iedb/
+//         rm $mhcii_file
+//
+//         export MHCFLURRY_DATA_DIR=/opt/mhcflurry_data
+//         mhcflurry-downloads fetch
+//
+//         cd \$CWD
+//         echo "OK" > ${iedb_chck_file_name}
+//         """
+//     }
+// } else {
+//
+//     iedb_install_out_ch = Channel.fromPath(iedb_chck_file)
+//
+// }
 
 /*
 Run pVACseq
@@ -5473,10 +5723,11 @@ mkPhasedVCF_out_pVACseq_ch0 = mkPhasedVCF_out_pVACseq_ch0.map{
 }
 
 process 'pVACseq' {
-
     tag "${meta.sampleName}"
 
-    label 'pVACtools'
+    label 'process_medium'
+    container "${params.pvacseq_container}"
+//     container "dabbleofdevops/pvacseq:20230306"
 
     input:
     tuple(
@@ -5583,8 +5834,10 @@ pVACseq_out = mhcI_out_f.mix(mhcII_out_f).groupTuple(by:[0,1]).map{
 }
 
 process concat_pVACseq_files {
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/12_pVACseq/MHC_${mhc_class}/",
         mode: publishDirMode
@@ -5638,10 +5891,10 @@ igs_ch = pVACseq_out_concat_ch0.map{
 
 
 process aggregated_reports {
-
     tag "${meta.sampleName}"
 
-    label 'pVACtools'
+    label 'process_medium'
+    container "${params.pvacseq_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/12_pVACseq/MHC_${mhc_class}/",
         mode: publishDirMode
@@ -5675,14 +5928,14 @@ generate_protein_fasta_phased_vcf_ch0 = generate_protein_fasta_phased_vcf_ch0.ma
 
 
 process 'pVACtools_generate_protein_seq' {
-
     tag "${meta.sampleName}"
 
-    label 'pVACtools'
+    label 'process_medium'
+    container "${params.pvacseq_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/06_proteinseq/",
-    mode: publishDirMode,
-    enabled: params.fullOutput
+        mode: publishDirMode,
+        enabled: params.fullOutput
 
     input:
     tuple(
@@ -5729,8 +5982,10 @@ hlahd_mixMHC2_pred_ch0 = hlahd_mixMHC2_pred_ch0.map{
 
 if(have_HLAHD) {
     process 'pepare_mixMHC2_seq' {
+        tag "${meta.sampleName}"
 
-        label 'nextNEOpiENV'
+        label 'process_medium'
+        container "${params.nextneopi_container}"
 
         tag "${meta.sampleName}"
 
@@ -5778,6 +6033,8 @@ if(have_HLAHD) {
         process install_mixMHC2pred {
 
             tag 'install mixMHC2pred'
+            label 'process_medium'
+            container "${params.nextneopi_container}"
 
             // do not cache
             cache false
@@ -5795,8 +6052,10 @@ if(have_HLAHD) {
         }
     } else if (( ! mixmhc2pred_chck_file.exists() || mixmhc2pred_chck_file.isEmpty()) && params.MiXMHC2PRED != "") {
         process link_mixMHC2pred {
-
             tag 'link mixMHC2pred'
+
+            label 'process_medium'
+            container "${params.nextneopi_container}"
 
             // do not cache
             cache false
@@ -5816,10 +6075,11 @@ if(have_HLAHD) {
     }
 
     process mixMHC2pred {
-
-        label 'nextNEOpiENV'
-
         tag "${meta.sampleName}"
+
+        label 'process_medium'
+        container "${params.nextneopi_container}"
+
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/13_mixMHC2pred",
             mode: publishDirMode
@@ -5879,10 +6139,11 @@ Clonality_out_ch0 = Clonality_out_ch0.map{
 }
 
 process addCCF {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
+
 
     publishDir "$params.outputDir/neoantigens/${meta.sampleName}/",
         saveAs: {
@@ -5953,10 +6214,10 @@ epitopes_fasta_in_ch = addCCF_out_ch.mix(Neofuse_results_ch1)
 (epitopes_fasta_in_ch, epitopes_protein_match_in_ch) = epitopes_fasta_in_ch.into(2)
 
 process make_epitopes_fasta {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     cache 'lenient'
 
@@ -5989,10 +6250,10 @@ process make_epitopes_fasta {
 }
 
 process blast_epitopes {
-
-    label 'Blast'
-
     tag "${meta.sampleName}"
+
+    label 'process_high'
+    container "${params.nextneopi_container}"
 
     cache 'lenient'
 
@@ -6033,10 +6294,11 @@ process blast_epitopes {
 }
 
 process add_blast_hits {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
+
 
     publishDir "$params.outputDir/neoantigens/${meta.sampleName}/",
         saveAs: {
@@ -6085,10 +6347,10 @@ process add_blast_hits {
 */
 
 process csin {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/14_CSiN/",
         mode: publishDirMode
@@ -6123,57 +6385,67 @@ process csin {
 igs_chck_file = file(workflow.workDir + "/.igs_install_ok.chck")
 igs_target = workflow.workDir + "/IGS"
 if(( ! igs_chck_file.exists() || igs_chck_file.isEmpty()) && params.IGS == "") {
-    process install_IGS {
-
-        tag 'install IGS'
-
-        // do not cache
-        cache false
-
-        output:
-        val("OK") into igs_chck_ch
-        path(".igs_install_ok.chck")
-
-        script:
-        """
-        mkdir -p ${igs_target} && \\
-        curl -sLk ${params.IGS_script_url} -o ${igs_target}/NeoAg_immunogenicity_predicition_GBM.R && \\
-        curl -sLk ${params.IGS_model_url} -o ${igs_target}/Final_gbm_model.rds && \\
-        patch -p0 ${igs_target}/NeoAg_immunogenicity_predicition_GBM.R ${baseDir}/assets/NeoAg_immunogenicity_predicition_GBM.patch && \\
-        chmod +x ${igs_target}/NeoAg_immunogenicity_predicition_GBM.R  && \\
-        echo "OK" > .igs_install_ok.chck && \\
-        cp -f .igs_install_ok.chck ${igs_chck_file}
-        """
-    }
+//     process install_IGS {
+//
+// //         tag 'install IGS'
+//         label 'process_medium'
+// //         conda (params.enable_conda ? nextneopi_conda : null)
+//         container "${params.nextneopi_container}"
+//
+//         // do not cache
+//         cache false
+//
+//         output:
+//         val("OK") into igs_chck_ch
+//         path(".igs_install_ok.chck")
+//
+//         script:
+//         """
+//         mkdir -p ${igs_target} && \\
+//         curl -sLk ${params.IGS_script_url} -o ${igs_target}/NeoAg_immunogenicity_predicition_GBM.R && \\
+//         curl -sLk ${params.IGS_model_url} -o ${igs_target}/Final_gbm_model.rds && \\
+//         patch -p0 ${igs_target}/NeoAg_immunogenicity_predicition_GBM.R ${baseDir}/assets/NeoAg_immunogenicity_predicition_GBM.patch && \\
+//         chmod +x ${igs_target}/NeoAg_immunogenicity_predicition_GBM.R  && \\
+//         echo "OK" > .igs_install_ok.chck && \\
+//         cp -f .igs_install_ok.chck ${igs_chck_file}
+//         """
+//     }
 } else if (( ! igs_chck_file.exists() || igs_chck_file.isEmpty()) && params.IGS != "") {
-    process link_IGS {
-
-        tag 'link IGS'
-
-        // do not cache
-        cache false
-
-        output:
-        val("OK") into igs_chck_ch
-        path(".igs_install_ok.chck")
-
-        script:
-        """
-        ln -s ${params.IGS} ${igs_target} && \\
-        echo "OK" > .igs_install_ok.chck && \\
-        cp -f .igs_install_ok.chck ${igs_chck_file}
-        """
-    }
+//     process link_IGS {
+//
+// //         tag 'link IGS'
+//         label 'process_medium'
+// //         conda (params.enable_conda ? nextneopi_conda : null)
+//         container "${params.nextneopi_container}"
+//
+//         // do not cache
+//         cache false
+//
+//         output:
+//         val("OK") into igs_chck_ch
+//         path(".igs_install_ok.chck")
+//
+//         script:
+//         """
+//         ln -s ${params.IGS} ${igs_target} && \\
+//         echo "OK" > .igs_install_ok.chck && \\
+//         cp -f .igs_install_ok.chck ${igs_chck_file}
+//         """
+//     }
 } else {
     igs_chck_ch = Channel.value("OK")
 }
 
 
 process immunogenicity_scoring {
-
-    label 'IGS'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.multiqc_container}"
+//     conda "bioconda::multiqc=1.13"
+//     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+//         'https://depot.galaxyproject.org/singularity/multiqc:1.13--pyhdfd78af_0' :
+//         'quay.io/biocontainers/multiqc:1.13--pyhdfd78af_0' }"
 
     // TODO: check why sometimes this fails: workaround ignore errors
     errorStrategy 'ignore'
@@ -6211,52 +6483,58 @@ process immunogenicity_scoring {
 }
 
 if(params.TCR) {
-
+    mixcr_chck_ch = Channel.empty()
     mixcr_chck_file = file(baseDir + "/bin/.mixcr_install_ok.chck")
     mixcr_target = baseDir + "/bin/"
     if(!mixcr_chck_file.exists() && params.MIXCR == "") {
-        process install_mixcr {
-
-            tag 'install mixcr'
-
-            // do not cache
-            cache false
-
-            output:
-            path(".mixcr_install_ok.chck") into mixcr_chck_ch
-
-            script:
-            """
-            curl -sLk ${params.MIXCR_url} -o mixcr.zip && \\
-            unzip -o mixcr.zip && \\
-            chmod +x mixcr && \\
-            cp -f mixcr ${mixcr_target} && \\
-            cp -f mixcr.jar ${mixcr_target} && \\
-            cp -f ${params.MIXCR_lic} ${mixcr_target}/mi.license && \\
-            touch .mixcr_install_ok.chck && \\
-            cp -f .mixcr_install_ok.chck ${mixcr_chck_file}
-            """
-        }
+//         process install_mixcr {
+//
+//             tag 'install mixcr'
+//             label 'process_medium'
+// //             conda (params.enable_conda ? nextneopi_conda : null)
+//             container "${params.nextneopi_container}"
+//
+//             // do not cache
+//             cache false
+//
+//             output:
+//             path(".mixcr_install_ok.chck") into mixcr_chck_ch
+//
+//             script:
+//             """
+//             curl -sLk ${params.MIXCR_url} -o mixcr.zip && \\
+//             unzip -o mixcr.zip && \\
+//             chmod +x mixcr && \\
+//             cp -f mixcr ${mixcr_target} && \\
+//             cp -f mixcr.jar ${mixcr_target} && \\
+//             cp -f ${params.MIXCR_lic} ${mixcr_target}/mi.license && \\
+//             touch .mixcr_install_ok.chck && \\
+//             cp -f .mixcr_install_ok.chck ${mixcr_chck_file}
+//             """
+//         }
     } else if (!mixcr_chck_file.exists() && params.MIXCR != "") {
-        process link_mixcr {
-
-            tag 'link mixcr'
-
-            // do not cache
-            cache false
-
-            output:
-            path(".mixcr_install_ok.chck") into mixcr_chck_ch
-
-            script:
-            """
-            ln -s ${params.MIXCR}/mixcr ${mixcr_target} && \\
-            ln -s ${params.MIXCR}/mixcr.jar ${mixcr_target} && \\
-            ln -s ${params.MIXCR_lic} ${mixcr_target}/mi.license && \\
-            touch .mixcr_install_ok.chck && \\
-            cp -f .mixcr_install_ok.chck ${mixcr_chck_file}
-            """
-        }
+//         process link_mixcr {
+//             tag 'link mixcr'
+//
+//             label 'process_medium'
+// //             conda (params.enable_conda ? nextneopi_conda : null)
+//             container "${params.nextneopi_container}"
+//
+//             // do not cache
+//             cache false
+//
+//             output:
+//             path(".mixcr_install_ok.chck") into mixcr_chck_ch
+//
+//             script:
+//             """
+//             ln -s ${params.MIXCR}/mixcr ${mixcr_target} && \\
+//             ln -s ${params.MIXCR}/mixcr.jar ${mixcr_target} && \\
+//             ln -s ${params.MIXCR_lic} ${mixcr_target}/mi.license && \\
+//             touch .mixcr_install_ok.chck && \\
+//             cp -f .mixcr_install_ok.chck ${mixcr_chck_file}
+//             """
+//         }
     } else {
         mixcr_chck_ch = Channel.fromPath(mixcr_chck_file)
     }
@@ -6264,6 +6542,8 @@ if(params.TCR) {
     process mixcr {
 
         tag "${meta.sampleName} : ${meta.sampleType}"
+        label 'process_medium'
+        container "${params.nextneopi_container}"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/15_BCR_TCR",
             mode: publishDirMode
@@ -6313,10 +6593,10 @@ sample_info_tmb_coding = sample_info_tmb_coding.map{
 }
 
 process collectSampleInfo {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.nextneopi_container}"
 
     publishDir "${params.outputDir}/neoantigens/${meta.sampleName}/",
         mode: publishDirMode
@@ -6381,10 +6661,15 @@ alignmentMetrics_ch = alignmentMetrics_ch.map{
 
 
 process multiQC {
-
-    label 'nextNEOpiENV'
-
     tag "${meta.sampleName}"
+
+    label 'process_medium'
+    container "${params.multiqc_container}"
+//     conda "bioconda::multiqc=1.13"
+//     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+//         'https://depot.galaxyproject.org/singularity/multiqc:1.13--pyhdfd78af_0' :
+//         'quay.io/biocontainers/multiqc:1.13--pyhdfd78af_0' }"
+
 
     publishDir "${params.outputDir}/analyses/${meta.sampleName}/QC",
         mode: publishDirMode

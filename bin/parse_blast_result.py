@@ -112,7 +112,5 @@ if __name__ == "__main__":
         right_on="peptide_seq",
     )
 
-    output_file = (
-        os.path.splitext(os.path.basename(epitope_file))[0] + "_ref_match.tsv"
-    )
+    output_file = os.path.splitext(os.path.basename(epitope_file))[0] + "_ref_match.tsv"
     result.to_csv(output_file, sep="\t", index=False, na_rep="-")
